@@ -44,17 +44,17 @@
 
 1.登录`github`，创建一个仓库，起个名字
 
-- ![avatar](http://1.116.91.244:9001/docsify/20200105143404136.png)
+- ![avatar](https://picture.zhanghong110.top/docsify/20200105143404136.png)
 
  2.将本地创建好的`docsify`的项目推送到`github`
 
  3.使用`github pages`宫娥能建立站点，这一步相当简单，首先在仓库库选择settings选项
 
-![avatar](http://1.116.91.244:9001/docsify/20200105145128951.png)
+![avatar](https://picture.zhanghong110.top/docsify/20200105145128951.png)
 
 4.选择分支及对应木目录，推荐使用默认目录，然后`github`就会在上方告诉你你应该访问的地址，至此，即可达到上传即更新。
 
-![avatar](http://1.116.91.244:9001/docsify/16389324572795.png)
+![avatar](https://picture.zhanghong110.top/docsify/16389324572795.png)
 
 
 
