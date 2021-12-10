@@ -21,7 +21,7 @@
 
 ![avatar](https://picture.zhanghong110.top/docsify/16390328581787.png)
 
-### 1.服务端搭建
+### 一.服务端搭建
 
 
 
@@ -52,7 +52,7 @@ nohup /u01/frp/frp_0.37.1_linux_386/frps -c /u01/frp/frp_0.37.1_linux_386/frps.i
 
 
 
-### 2.客户端的搭建
+### 二.客户端的搭建
 
 客户端应当启动`frpc`,对应的配置文件为`frpc.ini`配置文件如下
 
