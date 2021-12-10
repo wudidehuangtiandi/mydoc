@@ -6,11 +6,10 @@
 
 * [前端](/javascript/empty)
 
-* [各种中间件](/mw/empty)
+* [中间件](/mw/empty)
 
-* [各种服务器](/server/empty)
-
-* [centos](/centos/empty)
+* 服务相关
+  * [docker](/server/docker)
 
 * 小工具
   * [frp内网穿透](/gadgets/frp)
