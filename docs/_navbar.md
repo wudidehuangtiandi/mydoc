@@ -16,6 +16,9 @@
 * 小工具
   * [frp内网穿透](/gadgets/frp)
 
+* 其它
+  * [log4j2 JNDI注入漏洞](/other/log4j2jndi)
+
 * [作者相关](/readme)
   
 
