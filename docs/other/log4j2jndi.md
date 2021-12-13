@@ -122,7 +122,7 @@ log4j2使用 2.14.1
 
 [漏洞修复链接](https://github.com/apache/logging-log4j2/pull/607)
 
-我们可以看到标题未no longer formats lookups in messages by default，字面意思可知现在默认情况下将不对传入的信息进行处理，有兴趣的朋友可以去看下如何修改的，也就改了几十行不是很多。不过造成的影响还是很大的。
+我们可以看到标题为no longer formats lookups in messages by default，字面意思可知现在默认情况下将不对传入的信息进行处理，有兴趣的朋友可以去看下如何修改的，也就改了几十行不是很多。不过造成的影响还是很大的。
 
 
 
