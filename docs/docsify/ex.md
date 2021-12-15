@@ -48,7 +48,7 @@
 
  2.将本地创建好的`docsify`的项目推送到`github`
 
- 3.使用`github pages`宫娥能建立站点，这一步相当简单，首先在仓库库选择settings选项
+ 3.使用`github pages`就能建立站点，这一步相当简单，首先在仓库库选择settings选项
 
 ![avatar](https://picture.zhanghong110.top/docsify/20200105145128951.png)
 

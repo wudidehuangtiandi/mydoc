@@ -8,12 +8,14 @@
 
 * [中间件](/mw/empty)
 
+* [数据库](/database/empty)
+
 * 持续集成
   * [docker](/server/docker)
   * [elk](/server/elk)
   * [jenkins](/server/jenkins)
 
-* 小工具
+* 工具
   * [frp内网穿透](/gadgets/frp)
 
 * 其它

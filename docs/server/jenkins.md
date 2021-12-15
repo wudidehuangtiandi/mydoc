@@ -25,7 +25,6 @@
   启动前查看该目录是空的，启动后会生成相应的文件
   ll /var/lib/jenkins/
 
-
   登录web页面进行安装：http://ip:port　　(默认端口8080)
 
 
@@ -45,23 +44,19 @@
 
 
 
+> 必要插件的安装，在我们配置全局工具及部署项目前我们需要安装一些必要的插件，包括git相关,nodejs,jdk,maven,gradle等
+
+
+
 ## jenkins部署前端项目
 
 
 
-1.插件管理中安装nodeJs
+1.在`全局工具配置`中添加一个nodejs![avatar](https://picture.zhanghong110.top/docsify/16393781064243.png)
 
 
 
-![avatar](https://picture.zhanghong110.top/docsify/16393769645656.png)
-
-
-
-2.在`全局工具配置`中添加一个nodejs![avatar](https://picture.zhanghong110.top/docsify/16393781064243.png)
-
-
-
-3.配置SSH SERVER ，输入名字，地址，账户，密码，端口点击保存
+2.在系统配置中，配置SSH SERVER ，输入名字，地址，账户，密码，端口点击保存
 
 ![avatar](https://picture.zhanghong110.top/docsify/16393785227014.png)
 
@@ -69,25 +64,25 @@
 
 > 至此，准备工作完成，接下来我们开始配置项目
 
-4.新建项目，输入名字，构建一个自由风格的项目
+3.新建项目，输入名字，构建一个自由风格的项目
 
 ![avatar](https://picture.zhanghong110.top/docsify/16393789757698.png)
 
 > 本项目以gitlab的项目自动部署为主
 
-5.添加对应的仓库地址及用户名密码
+4.添加对应的仓库地址及用户名密码
 
 ![avatar](https://picture.zhanghong110.top/docsify/16393792775182.png)
 
-6.构建触发器，这里忘记要不要改了，这个项目是这么配置的，可以参考下
+5.构建触发器，这里忘记要不要改了，这个项目是这么配置的，可以参考下
 
 ![avatar](https://picture.zhanghong110.top/docsify/16393794104230.png)
 
-7.构建环境配置，这里也忘记了，参考下这个项目的配置即可
+6.构建环境配置，这里也忘记了，参考下这个项目的配置即可
 
 ![avatar](https://picture.zhanghong110.top/docsify/16393796203307.png)
 
-8.构建，分为两步，
+7.构建，分为两步，
 
 第一步是指源码拉过来后在jenkins环境中所作的命令，主要作用是构建出项目的打包内容，可以根据所需修改脚本
 
@@ -113,4 +108,86 @@ echo "success"
 
 ![avatar](https://picture.zhanghong110.top/docsify/16393801154093.png)
 
-> 到步骤8前端项目就部署完毕了，下面我们讲解下gitlab和配置和前端项目中该如何打包
+> 到步骤7前端项目就部署完毕了，下面我们讲解下gitlab和配置和前端项目中该如何打包
+
+8.前端项目打包
+
+由于需要将压缩包发送到目标服务器，因此前端项目需要配置打包插件`filemanager-webpack-plugin`。
+
+这个插件不同的版本配置有所区别，我们以`^2.0.5`为例，在`vue.config.js`里导出的根目录下增加如下配置,作用为删除上一个压缩包并且打一个压缩包。
+
+```
+  configureWebpack: {
+    plugins: [
+      　new FileManagerPlugin({
+        　　   onEnd: {
+              　　 delete: [
+                　　 path.resolve(__dirname, './dist/dist.zip'),
+             　　  ],
+              　　 archive: [
+                　　   {source: path.resolve(__dirname, './dist/'), destination:  path.resolve(__dirname, './dist/dist.zip')},
+               　　]
+          　　 }
+       　　})
+    ],
+    name: name,
+    resolve: {
+      alias: {
+        '@': resolve('src')
+      }
+    }
+  },
+```
+
+9.gitlab的配置
+
+在构建触发器部分，有如下两张图，一张是点击高级后的配置，可以产生TOKEN还有一张是用来演示gitlab应该配置什么样子的链接
+
+![avatar](https://picture.zhanghong110.top/docsify/16395472479680.png)
+
+
+
+![avatar](https://picture.zhanghong110.top/docsify/16395473613800.png)
+
+gitlab中填入以下属性，注意选择的分支需要和Jenkins的一致。当发起推送请求时就会触发jenkins的流程
+
+![avatar](https://picture.zhanghong110.top/docsify/16395474676011.png)
+
+
+
+> 至此，一个基本的前端项目就可以通过jenkins完成自动发布了，由于前端是直接由nginx转发，所以前端脚本只需要替换文件
+
+
+
+## jenkins部署后端项目
+
+> 下面我们来介绍jenkins如何自动部署java后端项目
+
+1.配置全局工具
+
+>JDK，选一个版本后直接自动安装即可，SSH的话配置和前端一样，在系统配置中设置，这两个就不放图片了
+
+maven,如下如所示在jenkins所在机器上防止maven所需配置文件（如果有私服需求），然后jenkins做出对应的配置
+
+![avatar](https://picture.zhanghong110.top/docsify/16395490262370.png)
+
+对应的下方选择一个maven版本安装即可
+
+![avatar](https://picture.zhanghong110.top/docsify/16395492552419.png)
+
+> 这里的gitlab设置和前端完全一样，jenkins构建环境之前的配置也和前端完全一样
+
+2.构建
+
+这一步区别在于首先需要设置打包命令，注意这个的话是忽略mvn的，正常时`mvn install package -Dmaven.test.skip=true`,然后下main设置正确配置文件即可。
+
+![avatar](https://picture.zhanghong110.top/docsify/1639549728.png)
+
+3.构建后操作，这步的目的就是把包发送到目标服务器并且执行命令启动
+
+其前缀路径意义可以参考前端，完全一摸一样，如果没有的可以点击构建选项下的增加构建步骤，最后一行用来执行docker命令
+
+![avatar](https://picture.zhanghong110.top/docsify/16395507121046.png)
+
+> 这样一个后端项目就部署完毕了
+

@@ -229,5 +229,22 @@ java程序需要添加如下依赖
 
 
 
-!>本片文档可能有一定的局限性,仅用于本公司的医废项目中，以后等待docker运用部署后再进行更新
+!>本文档可能有一定的局限性,仅用于本公司的医废项目中，以后等待docker运用部署后再进行更新
 
+> 时间问题，在设置，高级设置中有dateFormat:tz 选项默认时浏览器时间，并在日志时间上加上这个时区，比如东8区，将在时间上加8小时再展示。而elasticsearch中的日志时间已经经过了时区处理，因此这里的默认处理方式，对以UTC时间记录的日志是正确的，而以本地时区时间记录的日志处理是错误的。将**dateFormat:tz设置改为UTC时区即可解决问题**
+
+
+
+下面贴一下索引如何创建
+
+
+
+![avatar](https://picture.zhanghong110.top/docsify/162934116025871.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/162934116025872.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/162934116025873.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/162934116025874.png)
+
+通过以上几个方式就可以实现日志索引的发布，就可以在外部查询到日志信息。
