@@ -451,3 +451,11 @@ ADD msa-registy-0.0.1-SNAPSHOT.jar  /usr/var/docker_test/eureka.jar
 ENTRYPOINT ["nohup","java","-jar","/usr/var/docker_test/eureka.jar","&"]
 ```
 
+
+
+
+
+
+
+
+
