@@ -405,3 +405,25 @@ tomcat 作为一个框架，尤其是作为一个 Web 容器框架，监听机�
 //待续，后续准备剖析下tomcat的请求处理流程，这也是当时想看tomcat源码的初衷
 
 部分内容及debug思路引用自[渃汐湲简书](https://www.jianshu.com/p/7c9401b85704)
+
+### 2、tomcat的请求封装流程
+
+> 这边插播下如何debug启动tomcat源码,需要把ant下载下来的依赖加入到Libs或者采用网上那种写pom.xml然后用maven导入的方式。这边要注意，要使用ANT中的ide-intellij才会把所有依赖拉下来,使用deploy只会拉下运行时依赖。
+
+我们采用maven构建tomcat，步骤分为如下几步
+
+1.去github拉下源码
+
+2.在根目录下新建pom.xml，和自己的版本一致即可，内容为空。
+
+3.新建lib,将使用ant拉下来的依赖全部放进去并且设置为libs，这边要注意，ant相关的依赖需要手动从maven仓库导入
+
+4.在ContextConfig类下的configureStart 增加代码context.addServletContainerInitializer(new JasperInitializer(), null); 用来初始化jsp引擎
+
+5.将启动类设置为bootstrap即可，启动后访问8080发现可以访问就成功了，如下图所示
+
+![avatar](https://picture.zhanghong110.top/docsify/16400777952313.png)
+
+*debug启动后我们来分析下tomcat请求封装的过程*
+
+### 
