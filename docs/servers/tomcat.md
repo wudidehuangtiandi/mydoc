@@ -424,6 +424,1505 @@ tomcat 作为一个框架，尤其是作为一个 Web 容器框架，监听机�
 
 ![avatar](https://picture.zhanghong110.top/docsify/16400777952313.png)
 
-*debug启动后我们来分析下tomcat请求封装的过程*
+下面终于进行到`Connector`的分析阶段了，这也是Tomcat里面最复杂的一块功能了。`Connector`中文名为`连接器`，既然是连接器，它肯定会连接某些东西，连接些什么呢？`Connector`用于接受请求并将请求封装成Request和Response，然后交给`Container`进行处理，`Container`处理完之后再交给`Connector`返回给客户端。
 
-### 
+要理解`Connector`，我们需要问自己4个问题。
+
+- （1）`Connector`如何接受请求的？
+- （2）如何将请求封装成Request和Response的？
+- （3）封装完之后的Request和Response如何交给`Container`进行处理的？
+- （4）`Container`处理完之后如何交给`Connector`并返回给客户端的？
+
+
+
+先上一张图
+
+![avatar](https://picture.zhanghong110.top/docsify/5bf1bf5c1e4663382700d3f42eabfa96_1168971-20190805194836476-1284200425.png)
+
+可以看到`ProtocolHandler`的类继承层级，ajp和http11是两种不同的协议nio和nio2是不通的通讯方式，协议和通讯方式可以相互结合
+
+![avatar](https://picture.zhanghong110.top/docsify/16406587679869.png)
+
+`ProtocolHandler`包含三个部件：`Endpoint`、`Processor`、`Adapter`。
+
+在分析之前我们先来看结论，以便更好地理解源码。
+
+1. `Endpoint`用来处理底层Socket的网络连接，`Processor`用于将`Endpoint`接收到的Socket封装成Request，`Adapter`用于将Request交给Container进行具体的处理。
+2. `Endpoint`由于是处理底层的Socket网络连接，因此`Endpoint`是用来实现`TCP/IP协议`的，而`Processor`用来实现`HTTP协议`的，`Adapter`将请求适配到Servlet容器进行具体的处理。
+3. `Endpoint`的抽象实现类AbstractEndpoint里面定义了`Acceptor`和`AsyncTimeout`两个内部类和一个`Handler接口`。`Acceptor`用于监听请求，`AsyncTimeout`用于检查异步Request的超时，`Handler`用于处理接收到的Socket，在内部调用`Processor`进行处理。
+4. 在我们分析完源码后就明白了
+
+我们在`Service`标准实现`StandardService`的源码中发现，其`init()`、`start()`、`stop()`和`destroy()`方法分别会对Connectors的同名方法进行调用。而一个`Service`对应着多个`Connector`。
+
+![avatar](https://picture.zhanghong110.top/docsify/16406602414068.png)
+
+
+
+![avatar](https://picture.zhanghong110.top/docsify/16406603116234.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/16406607282947.png)
+
+在分析之前，我们看看`server.xml`,在这个文件中，我们看到一个`Connector`有几个关键属性，`port`和`protocol`是其中的两个。`server.xml`默认支持两种协议：`HTTP/1.1`和`AJP/1.3`。其中`HTTP/1.1`用于支持http1.1协议，而`AJP/1.3`用于支持对apache服务器的通信。
+
+> 截图太麻烦了，下面我们采用代码粘贴的方式展示
+
+我们来看下Connector的构造方法，有如下三个构造方法
+
+```
+   public Connector() {
+        this("HTTP/1.1");  默认无参构造会传入HTTP/1.1
+    }
+
+
+    public Connector(String protocol) {
+        configuredProtocol = protocol;
+        ProtocolHandler p = null;
+        try {
+            p = ProtocolHandler.create(protocol);
+        } catch (Exception e) {
+            log.error(sm.getString(
+                    "coyoteConnector.protocolHandlerInstantiationFailed"), e);
+        }
+        if (p != null) {
+            protocolHandler = p;
+            protocolHandlerClassName = protocolHandler.getClass().getName();
+        } else {
+            protocolHandler = null;
+            protocolHandlerClassName = protocol;
+        }
+        // Default for Connector depends on this system property
+        setThrowOnFailure(Boolean.getBoolean("org.apache.catalina.startup.EXIT_ON_INIT_FAILURE"));
+    }
+
+
+    public Connector(ProtocolHandler protocolHandler) {
+        protocolHandlerClassName = protocolHandler.getClass().getName();
+        configuredProtocol = protocolHandlerClassName;
+        this.protocolHandler = protocolHandler;
+        // Default for Connector depends on this system property
+        setThrowOnFailure(Boolean.getBoolean("org.apache.catalina.startup.EXIT_ON_INIT_FAILURE"));
+    }
+
+```
+
+由上述代码可知，当调用无参构造时会调用第二个构造方法，其核心create方法如下
+
+```
+ public static ProtocolHandler create(String protocol)
+            throws ClassNotFoundException, InstantiationException, IllegalAccessException,
+            IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
+        if (protocol == null || "HTTP/1.1".equals(protocol)
+                || org.apache.coyote.http11.Http11NioProtocol.class.getName().equals(protocol)) {
+            return new org.apache.coyote.http11.Http11NioProtocol();
+        } else if ("AJP/1.3".equals(protocol)
+                || org.apache.coyote.ajp.AjpNioProtocol.class.getName().equals(protocol)) {
+            return new org.apache.coyote.ajp.AjpNioProtocol();
+        } else {
+            // Instantiate protocol handler
+            Class<?> clazz = Class.forName(protocol);
+            return (ProtocolHandler) clazz.getConstructor().newInstance();
+        }
+    }
+```
+
+可知当protocol为空或者是HTTP/1.1时会使用`Http11NioProtocol`当protocol是AJP/1.3时则是`AjpNioProtocol`都不是的情况下则是反射调用类名。
+
+下面我们来分析下Connector.init()方法
+
+```
+@Override
+    protected void initInternal() throws LifecycleException {
+
+        super.initInternal();
+
+        if (protocolHandler == null) {
+            throw new LifecycleException(
+                    sm.getString("coyoteConnector.protocolHandlerInstantiationFailed"));
+        }
+
+        // Initialize adapter
+        adapter = new CoyoteAdapter(this);
+        protocolHandler.setAdapter(adapter);
+        if (service != null) {
+            protocolHandler.setUtilityExecutor(service.getServer().getUtilityExecutor());
+        }
+
+        // Make sure parseBodyMethodsSet has a default
+        if (null == parseBodyMethodsSet) {
+            setParseBodyMethods(getParseBodyMethods());
+        }
+
+        if (AprStatus.isAprAvailable() && AprStatus.getUseOpenSSL() &&
+                protocolHandler instanceof AbstractHttp11JsseProtocol) {
+            AbstractHttp11JsseProtocol<?> jsseProtocolHandler =
+                    (AbstractHttp11JsseProtocol<?>) protocolHandler;
+            if (jsseProtocolHandler.isSSLEnabled() &&
+                    jsseProtocolHandler.getSslImplementationName() == null) {
+                // OpenSSL is compatible with the JSSE configuration, so use it if APR is available
+                jsseProtocolHandler.setSslImplementationName(OpenSSLImplementation.class.getName());
+            }
+        }
+
+        try {
+            protocolHandler.init();
+        } catch (Exception e) {
+            throw new LifecycleException(
+                    sm.getString("coyoteConnector.protocolHandlerInitializationFailed"), e);
+        }
+    }
+```
+
+由上面的代码可知，其主要做了三件事，第一，初始化adapter，第二设置body的method列表，默认为POST，第三，初始化protocolHandler。
+
+从`ProtocolHandler类继承层级`我们知道`ProtocolHandler`的子类都必须实现`AbstractProtocol`抽象类，而`protocolHandler.init();`的逻辑代码正是在这个抽象类里面。我们来分析一下。、
+
+我们追踪到AbstractHttp11Protocol的init，发现它调用了父类的init，其代码如下
+
+```
+  @Override
+    public void init() throws Exception {
+        if (getLog().isInfoEnabled()) {
+            getLog().info(sm.getString("abstractProtocolHandler.init", getName()));
+            logPortOffset();
+        }
+
+        if (oname == null) {
+            // Component not pre-registered so register it
+            oname = createObjectName();
+            if (oname != null) {
+                Registry.getRegistry(null, null).registerComponent(this, oname, null);
+            }
+        }
+
+        if (this.domain != null) {
+            ObjectName rgOname = new ObjectName(domain + ":type=GlobalRequestProcessor,name=" + getName());
+            this.rgOname = rgOname;
+            Registry.getRegistry(null, null).registerComponent(
+                    getHandler().getGlobal(), rgOname, null);
+        }
+
+        String endpointName = getName();
+        endpoint.setName(endpointName.substring(1, endpointName.length()-1));
+        endpoint.setDomain(domain);
+
+        endpoint.init();
+    }
+```
+
+我们由上述代码不难看出，核心是初始化了endpoint,我们进去  endpoint.init();发现该方法位于抽象类AbstractEndpoint，该类是基于模板方法模式实现的，主要调用了子类的`bindWithCleanup()`方法，里面直接执行了`bind()`方法。代码如下
+
+```
+public final void init() throws Exception {
+        if (bindOnInit) {
+            bindWithCleanup();
+            bindState = BindState.BOUND_ON_INIT;
+        }
+        if (this.domain != null) {
+            // Register endpoint (as ThreadPool - historical name)
+            oname = new ObjectName(domain + ":type=ThreadPool,name=\"" + getName() + "\"");
+            Registry.getRegistry(null, null).registerComponent(this, oname, null);
+
+            ObjectName socketPropertiesOname = new ObjectName(domain +
+                    ":type=SocketProperties,name=\"" + getName() + "\"");
+            socketProperties.setObjectName(socketPropertiesOname);
+            Registry.getRegistry(null, null).registerComponent(socketProperties, socketPropertiesOname, null);
+
+            for (SSLHostConfig sslHostConfig : findSslHostConfigs()) {
+                registerJmx(sslHostConfig);
+            }
+        }
+    }
+```
+
+bind的实现由下面两个类提供，NIO2Endpoint，它跟NIOEndpoint的区别就是它实现了IO异步非阻塞。
+
+![avatar](https://picture.zhanghong110.top/docsify/16406717289283.png)
+
+我们进入NIO2Endpoint的bind方法代码如下
+
+```
+    @Override
+    public void bind() throws Exception {
+
+        // Create worker collection
+        if (getExecutor() == null) {
+            createExecutor();
+        }
+        if (getExecutor() instanceof ExecutorService) {
+            threadGroup = AsynchronousChannelGroup.withThreadPool((ExecutorService) getExecutor());
+        }
+        // AsynchronousChannelGroup needs exclusive access to its executor service
+        if (!internalExecutor) {
+            log.warn(sm.getString("endpoint.nio2.exclusiveExecutor"));
+        }
+
+        serverSock = AsynchronousServerSocketChannel.open(threadGroup);
+        socketProperties.setProperties(serverSock);
+        InetSocketAddress addr = new InetSocketAddress(getAddress(), getPortWithOffset());
+        serverSock.bind(addr, getAcceptCount());
+
+        // Initialize SSL if needed
+        initialiseSsl();
+    }
+```
+
+我们可以看到核心代码serverSock.bind(addr, getAcceptCount());，用于绑定`ServerSocket`到指定的IP和端口。
+
+接下来我们分析下Connector.start()方法
+
+```
+  @Override
+    protected void startInternal() throws LifecycleException {
+
+        // Validate settings before starting
+        String id = (protocolHandler != null) ? protocolHandler.getId() : null;
+        if (id == null && getPortWithOffset() < 0) {
+            throw new LifecycleException(sm.getString(
+                    "coyoteConnector.invalidPort", Integer.valueOf(getPortWithOffset())));
+        }
+
+        setState(LifecycleState.STARTING);
+
+        try {
+            protocolHandler.start();
+        } catch (Exception e) {
+            throw new LifecycleException(
+                    sm.getString("coyoteConnector.protocolHandlerStartFailed"), e);
+        }
+    }
+```
+
+关键代码就一行protocolHandler.start();由抽象类AbstractAjpProtocol及AbstractProtocol提供实现，我们进入AbstractProtocol的start方法
+
+```
+@Override
+public void start() throws Exception {
+    if (getLog().isInfoEnabled()) {
+        getLog().info(sm.getString("abstractProtocolHandler.start", getName()));
+        logPortOffset();
+    }
+
+    endpoint.start();
+    monitorFuture = getUtilityExecutor().scheduleWithFixedDelay(
+            () -> {
+                if (!isPaused()) {
+                    startAsyncTimeout();
+                }
+            }, 0, 60, TimeUnit.SECONDS);
+}
+```
+
+发现它调用endpoint.start(),我们进入后发现又回到了刚才那两个bind方法的实现。我们已经分析过了这边掠过
+
+```
+    public final void start() throws Exception {
+        if (bindState == BindState.UNBOUND) {
+            bindWithCleanup();
+            bindState = BindState.BOUND_ON_START;
+        }
+        startInternal();
+    }
+```
+
+之后进入startInternal，它也是由NIO2Endpoint及NIOEndpoint提供实现，我们进入NIO2Endpoint的startInternal方法如下所示
+
+```
+  @Override
+    public void startInternal() throws Exception {
+
+        if (!running) {
+            allClosed = false;
+            running = true;
+            paused = false;
+
+            if (socketProperties.getProcessorCache() != 0) {
+                processorCache = new SynchronizedStack<>(SynchronizedStack.DEFAULT_SIZE,
+                        socketProperties.getProcessorCache());
+            }
+            int actualBufferPool =
+                    socketProperties.getActualBufferPool(isSSLEnabled() ? getSniParseLimit() * 2 : 0);
+            if (actualBufferPool != 0) {
+                nioChannels = new SynchronizedStack<>(SynchronizedStack.DEFAULT_SIZE,
+                        actualBufferPool);
+            }
+            // Create worker collection
+            if (getExecutor() == null) {
+                createExecutor();
+            }
+
+            initializeConnectionLatch();
+            startAcceptorThread();
+        }
+    }
+```
+
+发现它主要的任务如下
+
+1.createExecutor 创建线程池
+
+2.initializeConnectionLatch 初始化链接latch 用于限制请求的并发量
+
+3.startAcceptorThread 开启acceptor线程
+
+!>注意这里的区别由于进入的是nio2其过程与nio略有区别。nio会多个poller = new Poller();开启poller线程。poller用于对接受者线程生产的消息（或事件）进行处理，poller最终调用的是Handler的代码
+
+> 到这里我们可以看到其实核心内容在初始化的流程中就有所涉及
+
+> 分析完了`Connector`的启动逻辑之后，我们就需要进一步分析一下http的请求逻辑，当请求从客户端发起之后，需要经过哪些操作才能真正地得到执行？
+
+我们用两张图来先大致了解下NIO和NIO2两种实现的区别
+
+nio:
+
+![avatar](https://picture.zhanghong110.top/docsify/16406769174094.png)
+
+    Java NIO提供了选择器组件（Selector）用于同时检测多个通道的事件以实现异步I/O。我们将感兴趣的事件注册到Selector上，当事件发生时可以通过Selector获得事件发生的通道，并进行相关的操作。
+    
+    异步I/O的一个优势在于，他允许你同时根据大量的输入、输出执行I/O操作。同步I/O一般要借助于轮询，或者创建许许多多的线程以处理大量的链接。使用异步I/O，你可以监听任意数量的通道事件，不必轮询，也不必启动额外的线程。
+    
+    由于Selector.select()方法是阻塞的，因此Tomcat采用轮询的方式进行处理，轮询线程称为Poller。每个Poller维护了一个Selector实例以及一个PollerEvent事件队列。每当接收到新的链接时，会将获得的SocketChannel对象封装为org.apache.tomcat.util.net.NioChannel，并且将其注册到Poller（创建一个PollerEvent实例，添加到事件队列）。
+    
+    Poller运行时，首先将新添加到队列中的PollerEvent取出，并将SocketChannel的读事件（OP_READ）注册到Poller持有的Selector上，然后执行Selector.select。当捕获到读事件时，构造SocketProcessor，并提交到线程池进行请求处理。
+    
+    为了提升对象的利用率，NioEndpoint分别为NioChannel和PollerEvent对象创建了缓存队列。当需要NioChannel和PollerEvent对象时，会检测缓存队列中是否存在可用对象，如果存在则从队列中取出对象并且重置，如果不存在则新建。
+
+
+nio2:
+
+![avatar](https://picture.zhanghong110.top/docsify/16406771061244.png)
+
+> 我们在这只分析Nio的实现，注意此处低版本的tomcat实现可能不通，Acceptor之前是景天抽象类现在是普通类,想要看懂下列流程我们首先要在心里大致知晓NIO的处理方式，也就是图nio所表述的东西，简单来说tomcat请求数据处理有两种线程，一个接收，一个处理，请求进入后先需要构造pollerEvent添加到事件队列，然后才会被处理线程处理。
+
+从startInternal中的startAcceptorThread方法进入，我们可以看到如下代码
+
+```
+protected void startAcceptorThread() {
+        acceptor = new Acceptor<>(this);
+        String threadName = getName() + "-Acceptor";
+        acceptor.setThreadName(threadName);
+        Thread t = new Thread(acceptor, threadName);
+        t.setPriority(getAcceptorThreadPriority());
+        t.setDaemon(getDaemon());
+        t.start();
+    }
+```
+
+最终执行了start方法，所以哦我们进入Acceptor查看重写的run方法如下
+
+```
+@Override
+    public void run() {
+
+        int errorDelay = 0;
+        long pauseStart = 0;
+
+        try {
+            // Loop until we receive a shutdown command
+            while (!stopCalled) {
+
+                // Loop if endpoint is paused.
+                // There are two likely scenarios here.
+                // The first scenario is that Tomcat is shutting down. In this
+                // case - and particularly for the unit tests - we want to exit
+                // this loop as quickly as possible. The second scenario is a
+                // genuine pause of the connector. In this case we want to avoid
+                // excessive CPU usage.
+                // Therefore, we start with a tight loop but if there isn't a
+                // rapid transition to stop then sleeps are introduced.
+                // < 1ms       - tight loop
+                // 1ms to 10ms - 1ms sleep
+                // > 10ms      - 10ms sleep
+                while (endpoint.isPaused() && !stopCalled) {
+                    if (state != AcceptorState.PAUSED) {
+                        pauseStart = System.nanoTime();
+                        // Entered pause state
+                        state = AcceptorState.PAUSED;
+                    }
+                    if ((System.nanoTime() - pauseStart) > 1_000_000) {
+                        // Paused for more than 1ms
+                        try {
+                            if ((System.nanoTime() - pauseStart) > 10_000_000) {
+                                Thread.sleep(10);
+                            } else {
+                                Thread.sleep(1);
+                            }
+                        } catch (InterruptedException e) {
+                            // Ignore
+                        }
+                    }
+                }
+
+                if (stopCalled) {
+                    break;
+                }
+                state = AcceptorState.RUNNING;
+
+                try {
+                    //if we have reached max connections, wait
+                    //如果请求达到了最大连接数，则wait直到连接数降下来
+                    endpoint.countUpOrAwaitConnection();
+
+                    // Endpoint might have been paused while waiting for latch
+                    // If that is the case, don't accept new connections
+                    if (endpoint.isPaused()) {
+                        continue;
+                    }
+
+                    U socket = null;
+                    try {
+                        // Accept the next incoming connection from the server
+                        // socket
+                        //接受下一次连接的socket,区分实现
+                        socket = endpoint.serverSocketAccept();
+                    } catch (Exception ioe) {
+                        // We didn't get a socket
+                        endpoint.countDownConnection();
+                        if (endpoint.isRunning()) {
+                            // Introduce delay if necessary
+                            errorDelay = handleExceptionWithDelay(errorDelay);
+                            // re-throw
+                            throw ioe;
+                        } else {
+                            break;
+                        }
+                    }
+                    // Successful accept, reset the error delay
+                    errorDelay = 0;
+
+                    // Configure the socket
+                    if (!stopCalled && !endpoint.isPaused()) {
+                        // setSocketOptions() will hand the socket off to
+                        // an appropriate processor if successful
+                        //`setSocketOptions()`这儿是关键，会将socket以事件的方式传递给poller
+                        if (!endpoint.setSocketOptions(socket)) {
+                            endpoint.closeSocket(socket);
+                        }
+                    } else {
+                        endpoint.destroySocket(socket);
+                    }
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    String msg = sm.getString("endpoint.accept.fail");
+                    log.error(msg, t);
+                }
+            }
+        } finally {
+            stopLatch.countDown();
+        }
+        state = AcceptorState.ENDED;
+    }
+```
+
+我们来翻译一下注释
+
+*如果endpoint暂停，则循环。这里有两种可能的情况。第一种情况是 Tomcat 正在关闭。在这种情况下 - 特别是对于单元测试 - 我们希望尽快退出这个循环。第二种情况是连接器的真正暂停。在这种情况下，我们希望避免过度使用 CPU。因此，我们从一个紧密的循环开始，但如果没有快速过渡到停止，则引入睡眠。 < 1ms - 紧密循环 1ms 到 10ms - 1ms 睡眠 > 10ms - 10ms 睡眠*
+
+
+
+- countUpOrAwaitConnection函数检查当前最大连接数，若未达到maxConnections则加一，否则等待；
+- socket = endpoint.serverSocketAccept();区分了nio与nio2的实现
+- setSocketOptions函数调用上的注释表明该函数将已连接套接字交给Poller线程处理，区分了nio与nio2的实现。
+
+
+
+下面我们进入setSocketOptions查看处理方式，我们先进入NioEndpoint的实现代码如下：
+
+```
+protected boolean setSocketOptions(SocketChannel socket) {
+        NioSocketWrapper socketWrapper = null;
+        try {
+            // Allocate channel and wrapper
+            NioChannel channel = null;
+            if (nioChannels != null) {
+                channel = nioChannels.pop();
+            }
+            if (channel == null) {
+                SocketBufferHandler bufhandler = new SocketBufferHandler(
+                        socketProperties.getAppReadBufSize(),
+                        socketProperties.getAppWriteBufSize(),
+                        socketProperties.getDirectBuffer());
+                if (isSSLEnabled()) {
+                    channel = new SecureNioChannel(bufhandler, this);
+                } else {
+                    channel = new NioChannel(bufhandler);
+                }
+            }
+            //封装channel
+            NioSocketWrapper newWrapper = new NioSocketWrapper(channel, this);
+            channel.reset(socket, newWrapper);
+            connections.put(socket, newWrapper);
+            socketWrapper = newWrapper;
+
+            // Set socket properties
+            // Disable blocking, polling will be used
+            socket.configureBlocking(false);
+            if (getUnixDomainSocketPath() == null) {
+                socketProperties.setProperties(socket.socket());
+            }
+
+            socketWrapper.setReadTimeout(getConnectionTimeout());
+            socketWrapper.setWriteTimeout(getConnectionTimeout());
+            socketWrapper.setKeepAliveLeft(NioEndpoint.this.getMaxKeepAliveRequests());
+            //注册到poller
+            poller.register(socketWrapper);
+            return true;
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            try {
+                log.error(sm.getString("endpoint.socketOptionsError"), t);
+            } catch (Throwable tt) {
+                ExceptionUtils.handleThrowable(tt);
+            }
+            if (socketWrapper == null) {
+                destroySocket(socket);
+            }
+        }
+        // Tell to close the socket if needed
+        return false;
+    }
+```
+
+从以上代码可以看出
+
+- 从NioChannel栈中出栈一个，若能重用（即不为null）则重用对象，否则新建一个NioChannel对象；
+- 封装channel到NioSocketWrapper
+- 将NioSocketWrapper注册到poller上
+- 若成功转给Poller线程该函数返回true，否则返回false。返回false后，Acceptor类的closeSocket函数会关闭通道和底层Socket连接并将当前最大连接数减一。
+
+poller:NioEndpoint的一个内部类实现了runable接口
+
+> Poller线程主要用于以较少的资源轮询已连接套接字以保持连接，当数据可用时转给工作线程。
+
+Poller线程数由NioEndPoint的pollerThreadCount成员变量控制，默认值为2与可用处理器数二者之间的较小值。
+
+Poller实现了Runnable接口，可以看到构造函数为每个Poller打开了一个新的Selector。
+
+```
+//构造函数
+public Poller() throws IOException {
+    this.selector = Selector.open();
+}
+```
+
+这个类有两个比较关键的方法Poller.register(),我们来看一下
+
+```
+  public void register(final NioSocketWrapper socketWrapper) {
+            socketWrapper.interestOps(SelectionKey.OP_READ);//this is what OP_REGISTER turns into.
+            PollerEvent event = null;
+            if (eventCache != null) {
+                event = eventCache.pop();
+            }
+            if (event == null) {
+                event = new PollerEvent(socketWrapper, OP_REGISTER);
+            } else {
+                event.reset(socketWrapper, OP_REGISTER);
+            }
+            addEvent(event);
+        }
+  private void addEvent(PollerEvent event) {
+            events.offer(event);
+            if (wakeupCounter.incrementAndGet() == 0) {
+                selector.wakeup();
+            }
+        }      
+```
+
+因为`Poller`维持了一个`events同步队列`，所以`Acceptor`接受到的channel会放在这个队列里面，放置的代码为`events.offer(event)`
+
+接下来我们来看下run函数的功能
+
+```
+ @Override
+        public void run() {
+            // Loop until destroy() is called
+            while (true) {
+
+                boolean hasEvents = false;
+
+                try {
+                    if (!close) {
+                        hasEvents = events();
+                        if (wakeupCounter.getAndSet(-1) > 0) {
+                            // If we are here, means we have other stuff to do
+                            // Do a non blocking select
+                            keyCount = selector.selectNow();
+                        } else {
+                            keyCount = selector.select(selectorTimeout);
+                        }
+                        wakeupCounter.set(0);
+                    }
+                    if (close) {
+                        events();
+                        timeout(0, false);
+                        try {
+                            selector.close();
+                        } catch (IOException ioe) {
+                            log.error(sm.getString("endpoint.nio.selectorCloseFail"), ioe);
+                        }
+                        break;
+                    }
+                    // Either we timed out or we woke up, process events first
+                    if (keyCount == 0) {
+                        hasEvents = (hasEvents | events());
+                    }
+                } catch (Throwable x) {
+                    ExceptionUtils.handleThrowable(x);
+                    log.error(sm.getString("endpoint.nio.selectorLoopError"), x);
+                    continue;
+                }
+
+                // 获取当前选择器中所有注册的“选择键(已就绪的监听事件)”
+                Iterator<SelectionKey> iterator =
+                    keyCount > 0 ? selector.selectedKeys().iterator() : null;
+                // Walk through the collection of ready keys and dispatch
+                // any active event.
+                // 对已经准备好的key进行处理
+                while (iterator != null && iterator.hasNext()) {
+                    SelectionKey sk = iterator.next();
+                    iterator.remove();
+                    NioSocketWrapper socketWrapper = (NioSocketWrapper) sk.attachment();
+                    // Attachment may be null if another thread has called
+                    // cancelledKey()
+                    if (socketWrapper != null) {
+                        // 真正处理key的地方
+                        processKey(sk, socketWrapper);
+                    }
+                }
+
+                // Process timeouts
+                timeout(keyCount,hasEvents);
+            }
+
+            getStopLatch().countDown();
+        }
+```
+
+- 若队列里有元素则会先把队列里的事件均执行一遍，PollerEvent的run方法会将通道注册到Poller的Selector上；
+- 对select返回的SelectionKey进行处理，用SelectionKey的attachment方法得到，接着调用processKey去处理已连接套接字通道。
+
+接下去我们分析processKey方法代码如下
+
+```
+protected void processKey(SelectionKey sk, NioSocketWrapper socketWrapper) {
+            try {
+                if (close) {
+                    socketWrapper.close();
+                } else if (sk.isValid()) {
+                    if (sk.isReadable() || sk.isWritable()) {
+                        if (socketWrapper.getSendfileData() != null) {
+                            processSendfile(sk, socketWrapper, false);
+                        } else {
+                            unreg(sk, socketWrapper, sk.readyOps());
+                            boolean closeSocket = false;
+                             // 1. 处理读事件，比如生成Request对象
+                            // Read goes before write
+                            if (sk.isReadable()) {
+                                if (socketWrapper.readOperation != null) {
+                                    if (!socketWrapper.readOperation.process()) {
+                                        closeSocket = true;
+                                    }
+                                } else if (socketWrapper.readBlocking) {
+                                    synchronized (socketWrapper.readLock) {
+                                        socketWrapper.readBlocking = false;
+                                        socketWrapper.readLock.notify();
+                                    }
+                                } else if (!processSocket(socketWrapper, SocketEvent.OPEN_READ, true)) {
+                                    closeSocket = true;
+                                }
+                            }
+                             // 2. 处理写事件，比如将生成的Response对象通过socket写回客户端
+                            if (!closeSocket && sk.isWritable()) {
+                                if (socketWrapper.writeOperation != null) {
+                                    if (!socketWrapper.writeOperation.process()) {
+                                        closeSocket = true;
+                                    }
+                                } else if (socketWrapper.writeBlocking) {
+                                    synchronized (socketWrapper.writeLock) {
+                                        socketWrapper.writeBlocking = false;
+                                        socketWrapper.writeLock.notify();
+                                    }
+                                } else if (!processSocket(socketWrapper, SocketEvent.OPEN_WRITE, true)) {
+                                    closeSocket = true;
+                                }
+                            }
+                            if (closeSocket) {
+                                socketWrapper.close();
+                            }
+                        }
+                    }
+                } else {
+                    // Invalid key
+                    socketWrapper.close();
+                }
+            } catch (CancelledKeyException ckx) {
+                socketWrapper.close();
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                log.error(sm.getString("endpoint.nio.keyProcessingError"), t);
+            }
+        }
+```
+
+它分别处理了读事件和写事件
+
+1. 处理读事件，比如生成Request对象
+
+2. 处理写事件，比如将生成的Response对象通过socket写回客户端
+
+   
+
+由上面的方法可以看出，处理关键方法为processSocket方法，我们进入它，位于AbstractEndpoint，代码如下
+
+```
+public boolean processSocket(SocketWrapperBase<S> socketWrapper,
+            SocketEvent event, boolean dispatch) {
+        try {
+            if (socketWrapper == null) {
+                return false;
+            }
+            SocketProcessorBase<S> sc = null;
+            if (processorCache != null) {
+            // 1. 从`processorCache`里面拿一个`Processor`来处理socket，`Processor`的实现为`SocketProcessor`
+                sc = processorCache.pop();
+            }
+            if (sc == null) {
+                sc = createSocketProcessor(socketWrapper, event);
+            } else {
+                sc.reset(socketWrapper, event);
+            }
+            // 2. 将`Processor`放到工作线程池中执行
+            Executor executor = getExecutor();
+            if (dispatch && executor != null) {
+                executor.execute(sc);
+            } else {
+                sc.run();
+            }
+        } catch (RejectedExecutionException ree) {
+            getLog().warn(sm.getString("endpoint.executor.fail", socketWrapper) , ree);
+            return false;
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            // This means we got an OOM or similar creating a thread, or that
+            // the pool and its queue are full
+            getLog().error(sm.getString("endpoint.process.fail"), t);
+            return false;
+        }
+        return true;
+    }
+
+```
+
+dispatch参数表示是否要在另外的线程中处理，上文processKey各处传递的参数都是true。
+
+- dispatch为true且工作线程池存在时会执行executor.execute(sc)，之后是由工作线程池处理已连接套接字；
+- 否则继续由Poller线程自己处理已连接套接字。
+
+我们看一下createSocketProcessor方法
+
+```
+ @Override
+    protected SocketProcessorBase<NioChannel> createSocketProcessor(
+            SocketWrapperBase<NioChannel> socketWrapper, SocketEvent event) {
+        return new SocketProcessor(socketWrapper, event);
+    }
+```
+
+是由于NioEndPoint自己实现的
+
+我们回到NioEndPoint，看SocketProcessor的run方法最终做了什么，代码如下
+
+```
+ @Override
+        protected void doRun() {
+            /*
+             * Do not cache and re-use the value of socketWrapper.getSocket() in
+             * this method. If the socket closes the value will be updated to
+             * CLOSED_NIO_CHANNEL and the previous value potentially re-used for
+             * a new connection. That can result in a stale cached value which
+             * in turn can result in unintentionally closing currently active
+             * connections.
+             */
+            Poller poller = NioEndpoint.this.poller;
+            if (poller == null) {
+                socketWrapper.close();
+                return;
+            }
+
+            try {
+                int handshake = -1;
+                try {
+                    if (socketWrapper.getSocket().isHandshakeComplete()) {
+                        // No TLS handshaking required. Let the handler
+                        // process this socket / event combination.
+                        handshake = 0;
+                    } else if (event == SocketEvent.STOP || event == SocketEvent.DISCONNECT ||
+                            event == SocketEvent.ERROR) {
+                        // Unable to complete the TLS handshake. Treat it as
+                        // if the handshake failed.
+                        handshake = -1;
+                    } else {
+                        handshake = socketWrapper.getSocket().handshake(event == SocketEvent.OPEN_READ, event == SocketEvent.OPEN_WRITE);
+                        // The handshake process reads/writes from/to the
+                        // socket. status may therefore be OPEN_WRITE once
+                        // the handshake completes. However, the handshake
+                        // happens when the socket is opened so the status
+                        // must always be OPEN_READ after it completes. It
+                        // is OK to always set this as it is only used if
+                        // the handshake completes.
+                        event = SocketEvent.OPEN_READ;
+                    }
+                } catch (IOException x) {
+                    handshake = -1;
+                    if (log.isDebugEnabled()) {
+                        log.debug("Error during SSL handshake",x);
+                    }
+                } catch (CancelledKeyException ckx) {
+                    handshake = -1;
+                }
+                if (handshake == 0) {
+                    SocketState state = SocketState.OPEN;
+                    // Process the request from this socket
+                    // 将处理逻辑交给`Handler`处理，当event为null时，则表明是一个`OPEN_READ`事件
+                    if (event == null) {
+                        state = getHandler().process(socketWrapper, SocketEvent.OPEN_READ);
+                    } else {
+                        state = getHandler().process(socketWrapper, event);
+                    }
+                    if (state == SocketState.CLOSED) {
+                        socketWrapper.close();
+                    }
+                } else if (handshake == -1 ) {
+                    getHandler().process(socketWrapper, SocketEvent.CONNECT_FAIL);
+                    socketWrapper.close();
+                } else if (handshake == SelectionKey.OP_READ){
+                    socketWrapper.registerReadInterest();
+                } else if (handshake == SelectionKey.OP_WRITE){
+                    socketWrapper.registerWriteInterest();
+                }
+            } catch (CancelledKeyException cx) {
+                socketWrapper.close();
+            } catch (VirtualMachineError vme) {
+                ExceptionUtils.handleThrowable(vme);
+            } catch (Throwable t) {
+                log.error(sm.getString("endpoint.processing.fail"), t);
+                socketWrapper.close();
+            } finally {
+                socketWrapper = null;
+                event = null;
+                //return to cache
+                if (running && !paused && processorCache != null) {
+                    processorCache.push(this);
+                }
+            }
+        }
+
+```
+
+首先该类有如下注释
+
+```
+/**
+ * This class is the equivalent of the Worker, but will simply use in an
+ * external Executor thread pool.
+ */
+```
+
+翻译可知SocketProcessor与Worker的作用等价。Handler`的关键方法是`process(),虽然这个方法有很多条件分支，但是逻辑却非常清楚，主要是调用Processor.process()方法我们跟进可以进入AbstractProtocol的process方法，这个方法有点长就不贴了，其核心代码为下面这句
+
+```
+  state = processor.process(wrapper, status);
+```
+
+> 至此endpoint的任务交给了processor
+
+processor:
+
+下面我们开始分析processor如何交接
+
+在process方法种还有一句代码如下所示，由所调用的`AbstractHttp11Protocol`和`AbstractAjpProtocol`来实现
+
+```
+processor = getProtocol().createProcessor();
+```
+
+我们由此可以进入这个方法，发现调用了下面的构造方法，设置了一些配置属性
+
+```
+public Http11Processor(AbstractHttp11Protocol<?> protocol, Adapter adapter) {
+        super(adapter);
+        this.protocol = protocol;
+
+        httpParser = new HttpParser(protocol.getRelaxedPathChars(),
+                protocol.getRelaxedQueryChars());
+
+        inputBuffer = new Http11InputBuffer(request, protocol.getMaxHttpHeaderSize(),
+                protocol.getRejectIllegalHeader(), httpParser);
+        request.setInputBuffer(inputBuffer);
+
+        outputBuffer = new Http11OutputBuffer(response, protocol.getMaxHttpHeaderSize());
+        response.setOutputBuffer(outputBuffer);
+
+        // Create and add the identity filters.
+        inputBuffer.addFilter(new IdentityInputFilter(protocol.getMaxSwallowSize()));
+        outputBuffer.addFilter(new IdentityOutputFilter());
+
+        // Create and add the chunked filters.
+        inputBuffer.addFilter(new ChunkedInputFilter(protocol.getMaxTrailerSize(),
+                protocol.getAllowedTrailerHeadersInternal(), protocol.getMaxExtensionSize(),
+                protocol.getMaxSwallowSize()));
+        outputBuffer.addFilter(new ChunkedOutputFilter());
+
+        // Create and add the void filters.
+        inputBuffer.addFilter(new VoidInputFilter());
+        outputBuffer.addFilter(new VoidOutputFilter());
+
+        // Create and add buffered input filter
+        inputBuffer.addFilter(new BufferedInputFilter());
+
+        // Create and add the gzip filters.
+        //inputBuffer.addFilter(new GzipInputFilter());
+        outputBuffer.addFilter(new GzipOutputFilter());
+
+        pluggableFilterIndex = inputBuffer.getFilters().length;
+    }
+```
+
+下面我们进入核心代码processor.process，主要关注其对读的操作，也只有一行代码。调用`service()`方法。
+
+```
+ @Override
+    public SocketState process(SocketWrapperBase<?> socketWrapper, SocketEvent status)
+            throws IOException {
+
+        SocketState state = SocketState.CLOSED;
+        Iterator<DispatchType> dispatches = null;
+        do {
+            if (dispatches != null) {
+                DispatchType nextDispatch = dispatches.next();
+                if (getLog().isDebugEnabled()) {
+                    getLog().debug("Processing dispatch type: [" + nextDispatch + "]");
+                }
+                state = dispatch(nextDispatch.getSocketStatus());
+                if (!dispatches.hasNext()) {
+                    state = checkForPipelinedData(state, socketWrapper);
+                }
+            } else if (status == SocketEvent.DISCONNECT) {
+                // Do nothing here, just wait for it to get recycled
+            } else if (isAsync() || isUpgrade() || state == SocketState.ASYNC_END) {
+                state = dispatch(status);
+                state = checkForPipelinedData(state, socketWrapper);
+            } else if (status == SocketEvent.OPEN_WRITE) {
+                // Extra write event likely after async, ignore
+                state = SocketState.LONG;
+            } else if (status == SocketEvent.OPEN_READ) {
+            //这里
+                state = service(socketWrapper);
+            } else if (status == SocketEvent.CONNECT_FAIL) {
+                logAccess(socketWrapper);
+            } else {
+                // Default to closing the socket if the SocketEvent passed in
+                // is not consistent with the current state of the Processor
+                state = SocketState.CLOSED;
+            }
+
+            if (getLog().isDebugEnabled()) {
+                getLog().debug("Socket: [" + socketWrapper +
+                        "], Status in: [" + status +
+                        "], State out: [" + state + "]");
+            }
+
+            if (isAsync()) {
+                state = asyncPostProcess();
+                if (getLog().isDebugEnabled()) {
+                    getLog().debug("Socket: [" + socketWrapper +
+                            "], State after async post processing: [" + state + "]");
+                }
+            }
+
+            if (dispatches == null || !dispatches.hasNext()) {
+                // Only returns non-null iterator if there are
+                // dispatches to process.
+                dispatches = getIteratorAndClearDispatches();
+            }
+        } while (state == SocketState.ASYNC_END ||
+                dispatches != null && state != SocketState.CLOSED);
+
+        return state;
+    }
+```
+
+我们进入对应的实现，由Http11Processor类实现service方法，这个类也很长我们不全贴了，它的主要操作就是
+
+1. 生成Request和Response对象
+2. 调用`Adapter.service()`方法，将生成的Request和Response对象传进去
+
+```
+  rp.setStage(org.apache.coyote.Constants.STAGE_SERVICE);
+  //传入生成的Request和Response对象传进去
+  getAdapter().service(request, response);
+```
+
+adapter:
+
+`Adapter`用于连接`Connector`和`Container`，起到承上启下的作用。`Processor`会调用`Adapter.service()`方法。我们来分析一下，主要做了下面几件事情：
+
+1. *根据coyote框架的request和response对象，生成connector的request和response对象（是HttpServletRequest和HttpServletResponse的封装）*
+2. *补充header*
+3. *解析请求，该方法会出现代理服务器、设置必要的header等操作*
+4. *真正进入容器的地方，调用Engine容器下pipeline的阀门*
+5. *通过request.finishRequest 与 response.finishResponse(刷OutputBuffer中的数据到浏览器) 来完成整个请求*
+
+代码如下，由CoyoteAdapter类提供
+
+```
+@Override
+    public void service(org.apache.coyote.Request req, org.apache.coyote.Response res)
+            throws Exception {
+// 1. 根据coyote框架的request和response对象，生成connector的request和response对象（是HttpServletRequest和HttpServletResponse的封装）
+        Request request = (Request) req.getNote(ADAPTER_NOTES);
+        Response response = (Response) res.getNote(ADAPTER_NOTES);
+
+        if (request == null) {
+            // Create objects
+            request = connector.createRequest();
+            request.setCoyoteRequest(req);
+            response = connector.createResponse();
+            response.setCoyoteResponse(res);
+
+            // Link objects
+            request.setResponse(response);
+            response.setRequest(request);
+
+            // Set as notes
+            req.setNote(ADAPTER_NOTES, request);
+            res.setNote(ADAPTER_NOTES, response);
+
+            // Set query string encoding
+            req.getParameters().setQueryStringCharset(connector.getURICharset());
+        }
+
+       // 2. 补充header
+        if (connector.getXpoweredBy()) {
+            response.addHeader("X-Powered-By", POWERED_BY);
+        }
+
+        boolean async = false;
+        boolean postParseSuccess = false;
+
+        req.getRequestProcessor().setWorkerThreadName(THREAD_NAME.get());
+
+        try {
+            // Parse and set Catalina and configuration specific
+            // request parameters
+            // 3. 解析请求，该方法会出现代理服务器、设置必要的header等操作
+            // 用来处理请求映射 (获取 host, context, wrapper, URI 后面的参数的解析, sessionId )
+            postParseSuccess = postParseRequest(req, request, res, response);
+            if (postParseSuccess) {
+                //check valves if we support async
+                request.setAsyncSupported(
+                        connector.getService().getContainer().getPipeline().isAsyncSupported());
+                // Calling the container
+                 // 4. 真正进入容器的地方，调用Engine容器下pipeline的阀门
+                connector.getService().getContainer().getPipeline().getFirst().invoke(
+                        request, response);
+            }
+            if (request.isAsync()) {
+                async = true;
+                ReadListener readListener = req.getReadListener();
+                if (readListener != null && request.isFinished()) {
+                    // Possible the all data may have been read during service()
+                    // method so this needs to be checked here
+                    ClassLoader oldCL = null;
+                    try {
+                        oldCL = request.getContext().bind(false, null);
+                        if (req.sendAllDataReadEvent()) {
+                            req.getReadListener().onAllDataRead();
+                        }
+                    } finally {
+                        request.getContext().unbind(false, oldCL);
+                    }
+                }
+
+                Throwable throwable =
+                        (Throwable) request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+
+                // If an async request was started, is not going to end once
+                // this container thread finishes and an error occurred, trigger
+                // the async error process
+                if (!request.isAsyncCompleting() && throwable != null) {
+                    request.getAsyncContextInternal().setErrorState(throwable, true);
+                }
+            } else {
+                //5. 通过request.finishRequest 与 response.finishResponse(刷OutputBuffer中的数据到浏览器) 来完成整个请求
+                request.finishRequest();
+                //将 org.apache.catalina.connector.Response对应的 OutputBuffer 中的数据 刷到 org.apache.coyote.Response 对应的 InternalOutputBuffer 中, 并且最终调用 socket对应的 outputStream 将数据刷出去( 这里会组装 Http Response 中的 header 与 body 里面的数据, 并且刷到远端
+                response.finishResponse();
+            }
+
+        } catch (IOException e) {
+            // Ignore
+        } finally {
+            AtomicBoolean error = new AtomicBoolean(false);
+            res.action(ActionCode.IS_ERROR, error);
+
+            if (request.isAsyncCompleting() && error.get()) {
+                // Connection will be forcibly closed which will prevent
+                // completion happening at the usual point. Need to trigger
+                // call to onComplete() here.
+                res.action(ActionCode.ASYNC_POST_PROCESS,  null);
+                async = false;
+            }
+
+            // Access log
+            if (!async && postParseSuccess) {
+                // Log only if processing was invoked.
+                // If postParseRequest() failed, it has already logged it.
+                Context context = request.getContext();
+                Host host = request.getHost();
+                // If the context is null, it is likely that the endpoint was
+                // shutdown, this connection closed and the request recycled in
+                // a different thread. That thread will have updated the access
+                // log so it is OK not to update the access log here in that
+                // case.
+                // The other possibility is that an error occurred early in
+                // processing and the request could not be mapped to a Context.
+                // Log via the host or engine in that case.
+                long time = System.nanoTime() - req.getStartTimeNanos();
+                if (context != null) {
+                    context.logAccess(request, response, time, false);
+                } else if (response.isError()) {
+                    if (host != null) {
+                        host.logAccess(request, response, time, false);
+                    } else {
+                        connector.getService().getContainer().logAccess(
+                                request, response, time, false);
+                    }
+                }
+            }
+
+            req.getRequestProcessor().setWorkerThreadName(null);
+
+            // Recycle the wrapper request and response
+            if (!async) {
+                updateWrapperErrorCount(request, response);
+                request.recycle();
+                response.recycle();
+            }
+        }
+    }
+```
+
+请求预处理，上面代码的postParseRequest方法，如下所示
+
+```
+protected boolean postParseRequest(org.apache.coyote.Request req, Request request,
+        org.apache.coyote.Response res, Response response) throws IOException, ServletException {
+
+    // If the processor has set the scheme (AJP does this, HTTP does this if
+    // SSL is enabled) use this to set the secure flag as well. If the
+    // processor hasn't set it, use the settings from the connector
+    if (req.scheme().isNull()) {
+        // Use connector scheme and secure configuration, (defaults to
+        // "http" and false respectively)
+        req.scheme().setString(connector.getScheme());
+        request.setSecure(connector.getSecure());
+    } else {
+        // Use processor specified scheme to determine secure state
+        request.setSecure(req.scheme().equals("https"));
+    }
+
+    // At this point the Host header has been processed.
+    // Override if the proxyPort/proxyHost are set
+    String proxyName = connector.getProxyName();
+    int proxyPort = connector.getProxyPort();
+    if (proxyPort != 0) {
+        req.setServerPort(proxyPort);
+    } else if (req.getServerPort() == -1) {
+        // Not explicitly set. Use default ports based on the scheme
+        if (req.scheme().equals("https")) {
+            req.setServerPort(443);
+        } else {
+            req.setServerPort(80);
+        }
+    }
+    if (proxyName != null) {
+        req.serverName().setString(proxyName);
+    }
+
+    MessageBytes undecodedURI = req.requestURI();
+
+    // Check for ping OPTIONS * request
+    if (undecodedURI.equals("*")) {
+        if (req.method().equalsIgnoreCase("OPTIONS")) {
+            StringBuilder allow = new StringBuilder();
+            allow.append("GET, HEAD, POST, PUT, DELETE, OPTIONS");
+            // Trace if allowed
+            if (connector.getAllowTrace()) {
+                allow.append(", TRACE");
+            }
+            res.setHeader("Allow", allow.toString());
+            // Access log entry as processing won't reach AccessLogValve
+            connector.getService().getContainer().logAccess(request, response, 0, true);
+            return false;
+        } else {
+            response.sendError(400, "Invalid URI");
+        }
+    }
+
+    MessageBytes decodedURI = req.decodedURI();
+
+    if (undecodedURI.getType() == MessageBytes.T_BYTES) {
+        if (connector.getRejectSuspiciousURIs()) {
+            if (checkSuspiciousURIs(undecodedURI.getByteChunk())) {
+                response.sendError(400, "Invalid URI");
+            }
+        }
+
+        // Copy the raw URI to the decodedURI
+        decodedURI.duplicate(undecodedURI);
+
+        // Parse (and strip out) the path parameters
+        parsePathParameters(req, request);
+
+        // URI decoding
+        // %xx decoding of the URL
+        try {
+            req.getURLDecoder().convert(decodedURI.getByteChunk(), connector.getEncodedSolidusHandlingInternal());
+        } catch (IOException ioe) {
+            response.sendError(400, "Invalid URI: " + ioe.getMessage());
+        }
+        // Normalization
+        if (normalize(req.decodedURI(), connector.getAllowBackslash())) {
+            // Character decoding
+            convertURI(decodedURI, request);
+            // URIEncoding values are limited to US-ASCII supersets.
+            // Therefore it is not necessary to check that the URI remains
+            // normalized after character decoding
+        } else {
+            response.sendError(400, "Invalid URI");
+        }
+    } else {
+        /* The URI is chars or String, and has been sent using an in-memory
+         * protocol handler. The following assumptions are made:
+         * - req.requestURI() has been set to the 'original' non-decoded,
+         *   non-normalized URI
+         * - req.decodedURI() has been set to the decoded, normalized form
+         *   of req.requestURI()
+         * - 'suspicious' URI filtering - if required - has already been
+         *   performed
+         */
+        decodedURI.toChars();
+        // Remove all path parameters; any needed path parameter should be set
+        // using the request object rather than passing it in the URL
+        CharChunk uriCC = decodedURI.getCharChunk();
+        int semicolon = uriCC.indexOf(';');
+        if (semicolon > 0) {
+            decodedURI.setChars(uriCC.getBuffer(), uriCC.getStart(), semicolon);
+        }
+    }
+
+    // Request mapping.
+    MessageBytes serverName;
+    if (connector.getUseIPVHosts()) {
+        serverName = req.localName();
+        if (serverName.isNull()) {
+            // well, they did ask for it
+            res.action(ActionCode.REQ_LOCAL_NAME_ATTRIBUTE, null);
+        }
+    } else {
+        serverName = req.serverName();
+    }
+
+    // Version for the second mapping loop and
+    // Context that we expect to get for that version
+    String version = null;
+    Context versionContext = null;
+    boolean mapRequired = true;
+
+    if (response.isError()) {
+        // An error this early means the URI is invalid. Ensure invalid data
+        // is not passed to the mapper. Note we still want the mapper to
+        // find the correct host.
+        decodedURI.recycle();
+    }
+
+    while (mapRequired) {
+        // This will map the the latest version by default
+        connector.getService().getMapper().map(serverName, decodedURI,
+                version, request.getMappingData());
+
+        // If there is no context at this point, either this is a 404
+        // because no ROOT context has been deployed or the URI was invalid
+        // so no context could be mapped.
+        if (request.getContext() == null) {
+            // Allow processing to continue.
+            // If present, the rewrite Valve may rewrite this to a valid
+            // request.
+            // The StandardEngineValve will handle the case of a missing
+            // Host and the StandardHostValve the case of a missing Context.
+            // If present, the error reporting valve will provide a response
+            // body.
+            return true;
+        }
+
+        // Now we have the context, we can parse the session ID from the URL
+        // (if any). Need to do this before we redirect in case we need to
+        // include the session id in the redirect
+        String sessionID;
+        if (request.getServletContext().getEffectiveSessionTrackingModes()
+                .contains(SessionTrackingMode.URL)) {
+
+            // Get the session ID if there was one
+            sessionID = request.getPathParameter(
+                    SessionConfig.getSessionUriParamName(
+                            request.getContext()));
+            if (sessionID != null) {
+                request.setRequestedSessionId(sessionID);
+                request.setRequestedSessionURL(true);
+            }
+        }
+
+        // Look for session ID in cookies and SSL session
+        try {
+            parseSessionCookiesId(request);
+        } catch (IllegalArgumentException e) {
+            // Too many cookies
+            if (!response.isError()) {
+                response.setError();
+                response.sendError(400);
+            }
+            return true;
+        }
+        parseSessionSslId(request);
+
+        sessionID = request.getRequestedSessionId();
+
+        mapRequired = false;
+        if (version != null && request.getContext() == versionContext) {
+            // We got the version that we asked for. That is it.
+        } else {
+            version = null;
+            versionContext = null;
+
+            Context[] contexts = request.getMappingData().contexts;
+            // Single contextVersion means no need to remap
+            // No session ID means no possibility of remap
+            if (contexts != null && sessionID != null) {
+                // Find the context associated with the session
+                for (int i = contexts.length; i > 0; i--) {
+                    Context ctxt = contexts[i - 1];
+                    if (ctxt.getManager().findSession(sessionID) != null) {
+                        // We found a context. Is it the one that has
+                        // already been mapped?
+                        if (!ctxt.equals(request.getMappingData().context)) {
+                            // Set version so second time through mapping
+                            // the correct context is found
+                            version = ctxt.getWebappVersion();
+                            versionContext = ctxt;
+                            // Reset mapping
+                            request.getMappingData().recycle();
+                            mapRequired = true;
+                            // Recycle cookies and session info in case the
+                            // correct context is configured with different
+                            // settings
+                            request.recycleSessionInfo();
+                            request.recycleCookieInfo(true);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!mapRequired && request.getContext().getPaused()) {
+            // Found a matching context but it is paused. Mapping data will
+            // be wrong since some Wrappers may not be registered at this
+            // point.
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                // Should never happen
+            }
+            // Reset mapping
+            request.getMappingData().recycle();
+            mapRequired = true;
+        }
+    }
+
+    // Possible redirect
+    MessageBytes redirectPathMB = request.getMappingData().redirectPath;
+    if (!redirectPathMB.isNull()) {
+        String redirectPath = URLEncoder.DEFAULT.encode(
+                redirectPathMB.toString(), StandardCharsets.UTF_8);
+        String query = request.getQueryString();
+        if (request.isRequestedSessionIdFromURL()) {
+            // This is not optimal, but as this is not very common, it
+            // shouldn't matter
+            redirectPath = redirectPath + ";" +
+                    SessionConfig.getSessionUriParamName(
+                        request.getContext()) +
+                "=" + request.getRequestedSessionId();
+        }
+        if (query != null) {
+            // This is not optimal, but as this is not very common, it
+            // shouldn't matter
+            redirectPath = redirectPath + "?" + query;
+        }
+        response.sendRedirect(redirectPath);
+        request.getContext().logAccess(request, response, 0, true);
+        return false;
+    }
+
+    // Filter trace method
+    if (!connector.getAllowTrace()
+            && req.method().equalsIgnoreCase("TRACE")) {
+        Wrapper wrapper = request.getWrapper();
+        String header = null;
+        if (wrapper != null) {
+            String[] methods = wrapper.getServletMethods();
+            if (methods != null) {
+                for (String method : methods) {
+                    if ("TRACE".equals(method)) {
+                        continue;
+                    }
+                    if (header == null) {
+                        header = method;
+                    } else {
+                        header += ", " + method;
+                    }
+                }
+            }
+        }
+        if (header != null) {
+            res.addHeader("Allow", header);
+        }
+        response.sendError(405, "TRACE method is not allowed");
+        // Safe to skip the remainder of this method.
+        return true;
+    }
+
+    doConnectorAuthenticationAuthorization(req, request);
+
+    return true;
+}
+```
+
+以MessageBytes的类型是T_BYTES为例：
+
+- parsePathParameters方法去除URI中分号表示的路径参数；
+- req.getURLDecoder()得到一个UDecoder实例，它的convert方法对URI解码，这里的解码只是移除百分号，计算百分号后两位的十六进制数字值以替代原来的三位百分号编码；
+- normalize方法规格化URI，解释路径中的“.”和“..”；
+- convertURI方法利用Connector的uriEncoding属性将URI的字节转换为字符表示；
+- 注意connector.getService().getMapper().map(serverName, decodedURI, version, request.getMappingData()) 这行，之前Service启动时MapperListener注册了该Service内的各Host和Context。根据URI选择Context时，Mapper的map方法采用的是convertURI方法解码后的URI与每个Context的路径去比较
+
+由容器来处理（自己处理）的话
+
+如果请求可以被传给容器的Pipeline即当postParseRequest方法返回true时，则由容器继续处理，在service方法中有connector.getService().getContainer().getPipeline().getFirst().invoke(request, response)这一行：
+
+- Connector调用getService返回StandardService；
+- StandardService调用getContainer返回StandardEngine；
+- StandardEngine调用getPipeline返回与其关联的StandardPipeline；
+
+> 至此我们应该就很清楚tomcat如何封装请求的了
+
