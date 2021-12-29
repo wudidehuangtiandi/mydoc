@@ -328,7 +328,7 @@ tomcat设计了三个组件 EndPoint、Processor、Adapter 来对应完成上述
 
 ![avatar](https://picture.zhanghong110.top/docsify/16399794549001.png)
 
-进入AbstractEndpoint 的 init 方法，下图可见关键方法是AbstractEndpoint 的 init 方法进入里卖弄可以发现执行了bind()方法
+进入AbstractEndpoint 的 init 方法，下图可见关键方法是AbstractEndpoint 的 init 方法进入里可以发现执行了bind()方法
 
 ![avatar](https://picture.zhanghong110.top/docsify/16399799797503.png)
 
@@ -336,7 +336,7 @@ tomcat设计了三个组件 EndPoint、Processor、Adapter 来对应完成上述
 
 ![avatar](https://picture.zhanghong110.top/docsify/16399802604255.png)
 
-> 到这里各个组件初始化的过程就分析完毕了
+> 到这里部分组件初始化的过程就分析完毕了，后续就是递归调用初始化所有的组件
 
 <hr/>
 
@@ -350,7 +350,7 @@ tomcat设计了三个组件 EndPoint、Processor、Adapter 来对应完成上述
 
 ![avatar](https://picture.zhanghong110.top/docsify/16399844854793.png)
 
-之后调用的方法基本同load,除了实现的抽象方法不通为`startInternal()`,我们来看一下大体流程图
+之后调用的方法基本同load,除了实现的抽象方法不同为`startInternal()`,我们来看一下大体流程图
 
 首先还是来到 LifecycleBase 的 start 方法，设置组件的状态，然后调用子类的 startInternal 方法。
 
@@ -364,7 +364,7 @@ tomcat设计了三个组件 EndPoint、Processor、Adapter 来对应完成上述
 
 ![avatar](https://picture.zhanghong110.top/docsify/16399877308835.png)
 
-Acceptor 线程是负责服务监听端口的请求接入的,我们可以看下 Accepter种复写的run方法是如何执行的
+Acceptor 线程是负责服务监听端口的请求接入的,我们可以看下 Accepter中复写的run方法是如何执行的
 
 ![avatar](https://picture.zhanghong110.top/docsify/16399886695184.png)
 
@@ -374,7 +374,7 @@ Acceptor 线程是负责服务监听端口的请求接入的,我们可以看下 
 
 ![avatar](https://picture.zhanghong110.top/docsify/16399902302549.png)
 
-可以看到endpoint接收传入链接
+可以看到endpoint接收传入链接，后续就是递归调用启动service，engine，connector等组件的start方法
 
 > 我们用一张图来总结上述调用过程，分为两大部分，逐级初始化和逐级启动
 
@@ -1926,3 +1926,475 @@ protected boolean postParseRequest(org.apache.coyote.Request req, Request reques
 
 > 至此我们应该就很清楚tomcat如何封装请求的了
 
+### 3、tomcat如何加载servlet
+
+作为servlet容器，我们得关注一下servlet的加载过程。engine作为container的最外层（见初始化流程时分析的容器的图），根据我们初始化流程中分析的递归调用方式，我们大概了解了一个调用流程，就是从engine这个最外层container开始，逐层向子容器递归调用start方法直到启动所有内嵌的Container,加载engine这个Container，会递归加载子Container。从engine.start() -> host.start() -> context.start()
+
+![avatar](https://picture.zhanghong110.top/docsify/fb0aad241a4ec2674bd63512d87e8ecb_337f2a9b41380cec25f129beb275fe42.png)
+
+那么servlet加载的核心就是context，我们进入context的实现类StandardContext瞅瞅其startInternal方法，代码比较长，我们截取其中的关键几处进行分析。
+
+我们分析时重点关注两点
+
+（1）加载servlet
+
+（2）调用servlet的init方法
+
+
+
+在StandardContext的startInternal中，它触发了一个init的时候设置的监听器ContextConfig，这个监听器将进行Context的相关配置处理
+
+```
+  fireLifecycleEvent(Lifecycle.CONFIGURE_START_EVENT, null);
+```
+
+```
+ protected void fireLifecycleEvent(String type, Object data) {
+        LifecycleEvent event = new LifecycleEvent(this, type, data);
+        for (LifecycleListener listener : lifecycleListeners) {
+            listener.lifecycleEvent(event);
+        }
+    }
+```
+
+我们进入其ContextConfig的实现类
+
+```
+ @Override
+    public void lifecycleEvent(LifecycleEvent event) {
+
+        // Identify the context we are associated with
+        try {
+            context = (Context) event.getLifecycle();
+        } catch (ClassCastException e) {
+            log.error(sm.getString("contextConfig.cce", event.getLifecycle()), e);
+            return;
+        }
+
+        // Process the event that has occurred
+        if (event.getType().equals(Lifecycle.CONFIGURE_START_EVENT)) {
+            configureStart();//配置servlet
+        } else if (event.getType().equals(Lifecycle.BEFORE_START_EVENT)) {
+            beforeStart();
+        } else if (event.getType().equals(Lifecycle.AFTER_START_EVENT)) {
+            // Restore docBase for management tools
+            if (originalDocBase != null) {
+                context.setDocBase(originalDocBase);
+            }
+        } else if (event.getType().equals(Lifecycle.CONFIGURE_STOP_EVENT)) {
+            configureStop();
+        } else if (event.getType().equals(Lifecycle.AFTER_INIT_EVENT)) {
+            init();
+        } else if (event.getType().equals(Lifecycle.AFTER_DESTROY_EVENT)) {
+            destroy();
+        }
+
+    }
+```
+
+可见该方法委托给了`configureStart`进行处理，我们进去看下
+
+```
+protected synchronized void configureStart() {
+        // Called from StandardContext.start()
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("contextConfig.start"));
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("contextConfig.xmlSettings",
+                    context.getName(),
+                    Boolean.valueOf(context.getXmlValidation()),
+                    Boolean.valueOf(context.getXmlNamespaceAware())));
+        }
+        //核心方法
+        webConfig();
+
+        if (!context.getIgnoreAnnotations()) {
+            applicationAnnotationsConfig();
+        }
+        if (ok) {
+            validateSecurityRoles();
+        }
+
+        // Configure an authenticator if we need one
+        if (ok) {
+            authenticatorConfig();
+        }
+
+        // Dump the contents of this pipeline if requested
+        if (log.isDebugEnabled()) {
+            log.debug("Pipeline Configuration:");
+            Pipeline pipeline = context.getPipeline();
+            Valve valves[] = null;
+            if (pipeline != null) {
+                valves = pipeline.getValves();
+            }
+            if (valves != null) {
+                for (Valve valve : valves) {
+                    log.debug("  " + valve.getClass().getName());
+                }
+            }
+            log.debug("======================");
+        }
+
+        // Make our application available if no problems were encountered
+        if (ok) {
+            context.setConfigured(true);
+        } else {
+            log.error(sm.getString("contextConfig.unavailable"));
+            context.setConfigured(false);
+        }
+        //初始化jsp解析引擎，为了启动加上去的
+        context.addServletContainerInitializer(new JasperInitializer(), null);
+
+    }
+```
+
+核心方法为webConfig，如下所示
+
+```
+    protected void webConfig() {
+       
+        WebXmlParser webXmlParser = new WebXmlParser(context.getXmlNamespaceAware(),
+                context.getXmlValidation(), context.getXmlBlockExternal());
+
+        Set<WebXml> defaults = new HashSet<>();
+        defaults.add(getDefaultWebXmlFragment(webXmlParser));
+
+        Set<WebXml> tomcatWebXml = new HashSet<>();
+        tomcatWebXml.add(getTomcatWebXmlFragment(webXmlParser));
+
+
+        //解析web.xml
+        WebXml webXml = createWebXml();
+
+        // Parse context level web.xml
+        InputSource contextWebXml = getContextWebXmlSource();
+        //这里
+        if (!webXmlParser.parseWebXml(contextWebXml, webXml, false)) {
+            ok = false;
+        }
+         
+        //然后创建了一个ServletContext，设置到StandardContext中
+        ServletContext sContext = context.getServletContext();
+
+        // Ordering is important here
+
+        // Step 1. Identify all the JARs packaged with the application and those
+        // provided by the container. If any of the application JARs have a
+        // web-fragment.xml it will be parsed at this point. web-fragment.xml
+        // files are ignored for container provided JARs.
+        Map<String,WebXml> fragments = processJarsForWebFragments(webXml, webXmlParser);
+
+        // Step 2. Order the fragments.
+        Set<WebXml> orderedFragments = null;
+        orderedFragments =
+                WebXml.orderWebFragments(webXml, fragments, sContext);
+
+        // Step 3. Look for ServletContainerInitializer implementations
+        if (ok) {
+        //做无web.xml的处理（后面将会调用这些ServletContainerInitializers）
+            processServletContainerInitializers();
+        }
+
+        if  (!webXml.isMetadataComplete() || typeInitializerMap.size() > 0) {
+            // Steps 4 & 5.
+            processClasses(webXml, orderedFragments);
+        }
+
+        if (!webXml.isMetadataComplete()) {
+            // Step 6. Merge web-fragment.xml files into the main web.xml
+            // file.
+            if (ok) {
+                ok = webXml.merge(orderedFragments);
+            }
+
+            // Step 7a
+            // merge tomcat-web.xml
+            webXml.merge(tomcatWebXml);
+
+            // Step 7b. Apply global defaults
+            // Have to merge defaults before JSP conversion since defaults
+            // provide JSP servlet definition.
+            webXml.merge(defaults);
+
+            // Step 8. Convert explicitly mentioned jsps to servlets
+            if (ok) {
+                convertJsps(webXml);
+            }
+
+            // Step 9. Apply merged web.xml to Context
+            if (ok) {
+            //再把web.xml中配置的Servlet加载
+                configureContext(webXml);
+            }
+        } else {
+            webXml.merge(tomcatWebXml);
+            webXml.merge(defaults);
+            convertJsps(webXml);
+            //再把web.xml中配置的Servlet加载
+            configureContext(webXml);
+        }
+
+        if (context.getLogEffectiveWebXml()) {
+            log.info(sm.getString("contextConfig.effectiveWebXml", webXml.toXml()));
+        }
+
+        // Always need to look for static resources
+        // Step 10. Look for static resources packaged in JARs
+        if (ok) {
+            // Spec does not define an order.
+            // Use ordered JARs followed by remaining JARs
+            Set<WebXml> resourceJars = new LinkedHashSet<>(orderedFragments);
+            for (WebXml fragment : fragments.values()) {
+                if (!resourceJars.contains(fragment)) {
+                    resourceJars.add(fragment);
+                }
+            }
+            processResourceJARs(resourceJars);
+            // See also StandardContext.resourcesStart() for
+            // WEB-INF/classes/META-INF/resources configuration
+        }
+
+        // Step 11. Apply the ServletContainerInitializer config to the
+        // context
+        if (ok) {
+            for (Map.Entry<ServletContainerInitializer,
+                    Set<Class<?>>> entry :
+                        initializerClassMap.entrySet()) {
+                if (entry.getValue().isEmpty()) {
+                    context.addServletContainerInitializer(
+                            entry.getKey(), null);
+                } else {
+                    context.addServletContainerInitializer(
+                            entry.getKey(), entry.getValue());
+                }
+            }
+        }
+    }
+```
+
+1.这里要看仔细首先webConfig方法做了web.xml的解析，如上图webConfig所示
+
+2.然后创建了一个ServletContext，设置到StandardContext中如上图webConfig所示
+
+3.getServletContext创建了一个ApplicationContext，而ApplicationContext则是ServletContext的实现类。
+
+```
+ @Override
+    public ServletContext getServletContext() {
+        if (context == null) {
+            context = new ApplicationContext(this);
+            if (altDDName != null) {
+                context.setAttribute(Globals.ALT_DD_ATTR,altDDName);
+            }
+        }
+        return context.getFacade();
+    }
+```
+
+4.再把web.xml中配置的Servlet加载，如上图webConfig所示
+
+我们看下`configureContext`方法对servlet做了什么，这方法老长了我们截取一些图片看下
+
+![avatar](https://picture.zhanghong110.top/docsify/16407705075401.png)
+
+稍往下有这句
+
+```
+ context.addChild(wrapper);
+```
+
+我么看到该方法创建了Wrapper，并包装了Servlet的相关配置信息。最后，wrapper会被包装到StandardContext中
+
+到这里，我们大体了解到contextConfig这个监听器主要是做了Servlet初始化的前置处理：（1）SPI机制的ServletContainerInitialiers发现；（2）加载web.xml加载Servlet配置为wrapper；
+
+
+
+接下来需要创建servlet对象
+
+我们回到StandardContext的startInternal方法里，方法太长，截取关键段落
+
+```
+// Call ServletContainerInitializers
+            for (Map.Entry<ServletContainerInitializer, Set<Class<?>>> entry :
+                initializers.entrySet()) {
+                try {
+                    entry.getKey().onStartup(entry.getValue(),
+                            getServletContext());
+                } catch (ServletException e) {
+                    log.error(sm.getString("standardContext.sciFail"), e);
+                    ok = false;
+                    break;
+                }
+            }
+```
+
+
+
+ServletContainerInitializers将被循环调用onStartup方法，传入ServletContext，你可以往ServletContext中加入Servlet实例等相关内容。
+
+然后再往下通过wrapper容器，加载Servlet，如
+
+```
+ // Load and initialize all "load on startup" servlets
+            if (ok) {
+                if (!loadOnStartup(findChildren())){
+                    log.error(sm.getString("standardContext.servletFail"));
+                    ok = false;
+                }
+            }
+```
+
+我们进入loadOnStartup看一下代码如下
+
+```
+ public boolean loadOnStartup(Container children[]) {
+
+        // Collect "load on startup" servlets that need to be initialized
+        TreeMap<Integer, ArrayList<Wrapper>> map = new TreeMap<>();
+        for (Container child : children) {
+            Wrapper wrapper = (Wrapper) child;
+            int loadOnStartup = wrapper.getLoadOnStartup();
+            if (loadOnStartup < 0) {
+                continue;
+            }
+            Integer key = Integer.valueOf(loadOnStartup);
+            ArrayList<Wrapper> list = map.get(key);
+            if (list == null) {
+                list = new ArrayList<>();
+                map.put(key, list);//挑选出要被加载的Servlet
+            }
+            list.add(wrapper);
+        }
+
+        // Load the collected "load on startup" servlets
+        for (ArrayList<Wrapper> list : map.values()) {
+            for (Wrapper wrapper : list) {
+                try {
+                    wrapper.load();//调用Load方法
+                } catch (ServletException e) {
+                    getLogger().error(sm.getString("standardContext.loadOnStartup.loadException",
+                          getName(), wrapper.getName()), StandardWrapper.getRootCause(e));
+                    // NOTE: load errors (including a servlet that throws
+                    // UnavailableException from the init() method) are NOT
+                    // fatal to application startup
+                    // unless failCtxIfServletStartFails="true" is specified
+                    if(getComputedFailCtxIfServletStartFails()) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+
+    }
+
+```
+
+可以看到oadOnStartup方法首先挑选出要被加载的Servlet，紧接着调用wrapper的load方法，我们进入实现类
+
+看看StandardWrapper的load方法做了啥代码如下
+
+```
+@Override
+    public synchronized void load() throws ServletException {
+        instance = loadServlet();//加载并返回一个Servlet实例
+
+        if (!instanceInitialized) {
+            initServlet(instance);//如果没有初始化过，那么调用initServlet初始化
+        }
+
+        if (isJspServlet) {
+            StringBuilder oname = new StringBuilder(getDomain());
+
+            oname.append(":type=JspMonitor");
+
+            oname.append(getWebModuleKeyProperties());
+
+            oname.append(",name=");
+            oname.append(getName());
+
+            oname.append(getJ2EEKeyProperties());
+
+            try {
+                jspMonitorON = new ObjectName(oname.toString());
+                Registry.getRegistry(null, null).registerComponent(instance, jspMonitorON, null);
+            } catch (Exception ex) {
+                log.warn(sm.getString("standardWrapper.jspMonitorError", instance));
+            }
+        }
+    }
+```
+
+可以看到首先加载并返回一个Servlet实例，设置到当前Wrapper的Servlet成员变量中。
+
+其次，如果没有初始化过，那么调用initServlet初始化
+
+我们分别看下两个方法
+
+首先loadServlet,比较长，我们看关键
+
+```
+  try {
+                servlet = (Servlet) instanceManager.newInstance(servletClass);
+            } catch (ClassCastException e) {
+```
+
+可见反射做了Servlet实例化
+
+然后看下initServlet
+
+```
+private synchronized void initServlet(Servlet servlet)
+            throws ServletException {
+
+        if (instanceInitialized) {
+            return;
+        }
+
+        // Call the initialization method of this servlet
+        try {
+            if( Globals.IS_SECURITY_ENABLED) {
+                boolean success = false;
+                try {
+                    Object[] args = new Object[] { facade };
+                    SecurityUtil.doAsPrivilege("init",
+                                               servlet,
+                                               classType,
+                                               args);
+                    success = true;
+                } finally {
+                    if (!success) {
+                        // destroy() will not be called, thus clear the reference now
+                        SecurityUtil.remove(servlet);
+                    }
+                }
+            } else {
+                servlet.init(facade);
+            }
+
+            instanceInitialized = true;
+        } catch (UnavailableException f) {
+            unavailable(f);
+            throw f;
+        } catch (ServletException f) {
+            // If the servlet wanted to be unavailable it would have
+            // said so, so do not call unavailable(null).
+            throw f;
+        } catch (Throwable f) {
+            ExceptionUtils.handleThrowable(f);
+            getServletContext().log(sm.getString("standardWrapper.initException", getName()), f);
+            // If the servlet wanted to be unavailable it would have
+            // said so, so do not call unavailable(null).
+            throw new ServletException
+                (sm.getString("standardWrapper.initException", getName()), f);
+        }
+    }
+```
+
+这里的facade可以看做ServletConfig，它是wrapper的门面，包含了wrapper实例，而wrapper的getServletContext方法则从父级StandardContext中的getServletContext获取Context；至此，web.xml中的Servlet配置被包装成wrapper并存放于StandardContext中。
+
+> 至此我们应该能够很清晰的看出tomcat时如何加载servlet的了

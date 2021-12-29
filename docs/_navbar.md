@@ -1,8 +1,8 @@
 * [本项目](/docsify/ex)
 
 * 后端
-  * [分布式](/java/empty)
-  * [多线程](/java/empty2)
+  * [springmvc](/java/springmvc)
+ 
 
 * [前端](/javascript/empty)
 
