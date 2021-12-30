@@ -2397,4 +2397,4 @@ private synchronized void initServlet(Servlet servlet)
 
 这里的facade可以看做ServletConfig，它是wrapper的门面，包含了wrapper实例，而wrapper的getServletContext方法则从父级StandardContext中的getServletContext获取Context；至此，web.xml中的Servlet配置被包装成wrapper并存放于StandardContext中。
 
-> 至此我们应该能够很清晰的看出tomcat时如何加载servlet的了
+> 至此我们应该能够很清晰的看出tomcat是如何加载servlet的了
