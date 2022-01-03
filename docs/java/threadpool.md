@@ -203,7 +203,7 @@ public static ExecutorService newCachedThreadPool() {
 
  `uni`t – `keepAliveTime` 参数的时间单位
 
-` workQueue` – 用于在执行任务之前保存任务的队列。这个队列将只保存 execute 方法提交的 Runnable 任务。
+`workQueue` – 用于在执行任务之前保存任务的队列。这个队列将只保存 execute 方法提交的 Runnable 任务。
 
 举个栗子
 
