@@ -464,6 +464,8 @@ tomcat 作为一个框架，尤其是作为一个 Web 容器框架，监听机�
 
 在分析之前，我们看看`server.xml`,在这个文件中，我们看到一个`Connector`有几个关键属性，`port`和`protocol`是其中的两个。`server.xml`默认支持两种协议：`HTTP/1.1`和`AJP/1.3`。其中`HTTP/1.1`用于支持http1.1协议，而`AJP/1.3`用于支持对apache服务器的通信。
 
+!>tomcat8.0以前默认是BIO，之后是NIO，我这个版本直接BIO实现都移除了
+
 > 截图太麻烦了，下面我们采用代码粘贴的方式展示
 
 我们来看下Connector的构造方法，有如下三个构造方法
@@ -712,7 +714,7 @@ public void start() throws Exception {
 }
 ```
 
-发现它调用endpoint.start(),我们进入后发现又回到了刚才那两个bind方法的实现。我们已经分析过了这边掠过
+发现它调用endpoint.start(),我们进入后发现又回到了刚才那两个bind方法的实现。我们已经分析过了这边略过
 
 ```
     public final void start() throws Exception {
@@ -791,7 +793,7 @@ nio2:
 
 ![avatar](https://picture.zhanghong110.top/docsify/16406771061244.png)
 
-> 我们在这只分析Nio的实现，注意此处低版本的tomcat实现可能不通，Acceptor之前是景天抽象类现在是普通类,想要看懂下列流程我们首先要在心里大致知晓NIO的处理方式，也就是图nio所表述的东西，简单来说tomcat请求数据处理有两种线程，一个接收，一个处理，请求进入后先需要构造pollerEvent添加到事件队列，然后才会被处理线程处理。
+> 我们在这只分析Nio的实现，注意此处低版本的tomcat实现可能不同，Acceptor之前是抽象类现在是普通类,想要看懂下列流程我们首先要在心里大致知晓NIO的处理方式，也就是图nio所表述的东西，简单来说tomcat请求数据处理有两种线程，一个接收，一个处理，请求进入后先需要构造pollerEvent添加到事件队列，然后才会被处理线程处理。
 
 从startInternal中的startAcceptorThread方法进入，我们可以看到如下代码
 
@@ -1217,6 +1219,8 @@ dispatch参数表示是否要在另外的线程中处理，上文processKey各�
 
 - dispatch为true且工作线程池存在时会执行executor.execute(sc)，之后是由工作线程池处理已连接套接字；
 - 否则继续由Poller线程自己处理已连接套接字。
+
+!>在这里我们可以解决一个困惑，就是虽然采用了nio但是从这里之后还是交由线程池处理的，所以还是多线程处理的
 
 我们看一下createSocketProcessor方法
 
