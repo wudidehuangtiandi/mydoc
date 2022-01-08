@@ -156,7 +156,15 @@ public class PlainEchoClient {
 
 可以看到实现了一个简单的BIO模型，同步，阻塞，进来一个请求启动一个线程处理,代码比较简单明晰，就不讲解了。
 
+!>BIO的问题在于
+
+1.每个请求都需要创建一个线程,与对应的客户端进行数据read,业务处理，write
+2.当并发量较大时，需要创建大量的线程来处理连接，系统资源占用较大
+3.连接建立后，如果线程暂时没有数据可读，则线程就阻塞在Read上，造成线程资源的浪费,如果没有用户通讯，线程就会堵塞在accept上。
+
 ## NIO
+
+> 从JDK1.4开始，增加NIO支持，tomcat从8.0之后也完全移除了BIO的实现，默认采用NIO
 
 `NioSocket`（即new io socket）是一种同步非阻塞的I/O，其使用`buffer`来缓存数据和`channel`来传输数据，使用select来分拣消息。其使用的`ServerSocketChannel`和`SocketChannel`对应于之前学习的`ServerSocket`和`Socket`。
 
@@ -168,7 +176,7 @@ public class PlainEchoClient {
 
 异步特性上面:
  `socket` 在连接和读写是都是堵塞状态的，即所在线程必须停住等待连接和数据的读入及写出，如果想在通信的时候可以开辟线程，一个线程对应一个socket连接，这样不仅资源消耗太高，而且线程安全问题也不容小觑！
- `niosocket`可以再连接、读入、写出等待时执行其他代码。
+ `niosocket`可以在连接、读入、写出等待时执行其他代码，简单来说就是无限等待变成了无限循环轮询管道。
 
 对应的实现是`nio`我们看下实现的demo
 
@@ -333,7 +341,7 @@ public class NIOServer {
 }
 ```
 
-> 做个解读，主要就是先初始化一个管道和一个选择器，然后单个线程选择器不断去轮询各种状态的管道（读个管道），根据返回结果给与不同的处理
+> 做个解读，主要就是先初始化一个管道和一个选择器，然后单个线程选择器不断去轮询各种状态的管道（读管道），根据返回结果给与不同的处理。仅用单个线程来处理多个Channels的好处是，只需要更少的线程来处理通道。事实上，可以只用一个线程处理所有的通道。因为对于操作系统来说，线程之间上下文切换的开销很大，而且每个线程都要占用系统的一些资源。因此，使用的线程越少越好。
 
 客户端：
 
@@ -490,8 +498,494 @@ public class CharsetHelper {
 }
 ```
 
-!>可以看到NIO实现起来是比较复杂的，同时许多细节设计不好会引起严重的问题，尽量不要尝试实现自己的nio框架，除非有经验丰富的工程师，尽量使用经过广泛实践的开源NIO框架Mina、Netty3、xSocket，还有可以看出NIO的实现是单线程的，所以会有线程安全问题。
+
+
+!>NIO存在的问题
+
+在NIO的处理方式中，当一个请求来的话，开启线程进行处理 ( **这里demo可能没有体现，实际上多路复用的IO并不是一直单线程，demo中其实到`handleKey`这步就可以加入线程池处理了，看多tomcat源码就知道了选择器应该是单独线程，否则完全就阻塞了就没啥意义了。**)，所以这里有链接需要处理就会开启线程，这个线程可能会等待后端应用的资源(JDBC连接等)，其实这个线程就被阻塞了，当并发上来的话，还是会有BIO一样的问题。而选择器非阻塞虽然不用等待但是一直占用CPU。
 
 ## AIO
 
-待续
+> 从JDK1.7开始新增的异步非阻塞IO，这部分内容被称作NIO2
+
+与NIO不同，当进行读写操作时，AIO只须直接调用API的read或write方法即可。 两种方法均为异步的：
+
+* 对于读操作而言，当有流可读取时，操作系统会将可读的流传入read方法的缓冲区，并通知应用程序； 
+
+* 对于写操作而言，当操作系统将write方法传递的流写入完毕时，操作系统主动通知应用程序。  	
+
+  
+
+  即可以理解为，read/write方法都是异步的，完成后会主动调用回调函数。  
+
+  在JDK1.7中，这部分内容被称作NIO2，主要在`Java.nio.channels`包下增加了下面四个异步通道： 	
+
+  `AsynchronousSocketChannel `	
+
+  `AsynchronousServerSocketChannel `	
+
+  AsynchronousFileChannel `	
+
+  `AsynchronousDatagramChannel ` 
+
+  在AIO socket编程中，服务端通道是 `AsynchronousServerSocketChannel`： 	
+
+  open()静态工厂：  
+
+  ```
+        	public static AsynchronousServerSocketChannel open(AsynchronousChannelGroup group)        
+  
+        	public static AsynchronousServerSocketChannel open()        
+  ```
+
+  ​	
+
+  如果参数是null，则由系统默认提供程序创建resulting channel，并且绑定到默认组 	bind()方法用于绑定服务端IP地址（还有端口号）。 	
+
+  accept()用于接收用户连接请求。 
+
+  ```
+  	AsynchronousServerSocketChannel server = AsynchronousServerSocketChannel.open().bind(new InetSocketAddress(PORT); 
+  
+  	public abstract <A> void accept(A attachment,CompletionHandler<AsynchronousSocketChannel,? super A> handler); 
+  
+  	public abstract Future<AsynchronousSocketChannel> accept();
+  ```
+
+  
+
+  在客户端使用的通道是`AsynchronousSocketChannel`： 	
+
+  这个通道处理提供open静态工厂方法外，还提供了read和write方法。 	
+
+  ```
+  public abstract Future<Void> connect(SocketAddress remote);
+  ```
+
+   Future对象的get()方法会阻塞该线程，所以这种方式是阻塞式的异步IO 
+
+  ```
+  public abstract <A> void connect(SocketAddress remote,  A attachment,CompletionHandler<Void,? super A> handler);
+  ```
+
+
+
+在AIO编程中，发出一个事件（accept read write等）之后要指定事件处理类（回调函数），AIO中的事件处理类是 `CompletionHandler<V,A>`，接口定义了如下两个方法，分别在异步操作成功和失败时被回调： 	
+
+`void completed(V result, A attachment)`;    *//第一个参数代表IO操作返回的对象，第二个参数代表发起IO操作时传入的附加参数* 	
+
+`void failed(Throwable exc, A attachment)`;    *//第一个参数代表IO操作失败引发的异常或错误*  
+
+异步channel API提供了两种方式监控/控制异步操作(connect,accept, read，write等)： 
+
+第一种方式是返回`java.util.concurrent.Future`对象，  检查Future的状态可以得到操作是否完成还是失败，还是进行中（`future.get()`阻塞当前进程以判断IO操作完成） 	
+
+第二种方式为操作提供一个回调参数`java.nio.channels.CompletionHandler` 这个回调类包含completed,failed两个方法。
+
+**Future方式（异步阻塞）**
+
+服务端
+
+```
+public class ServerOnFuture {
+    static final int PORT = 8088;
+    static final String IP = "localhost";
+    static ByteBuffer buffer = ByteBuffer.allocateDirect(1024);
+
+    public static void main(String[] args) {
+        try (AsynchronousServerSocketChannel serverSocketChannel = AsynchronousServerSocketChannel.open()) {
+            serverSocketChannel.bind(new InetSocketAddress(IP, PORT));
+            while (true) {
+                Future<AsynchronousSocketChannel> channelFuture = serverSocketChannel.accept();
+                try (AsynchronousSocketChannel socketChannel = channelFuture.get()) {
+                    while (socketChannel.read(buffer).get() != -1) {
+                        buffer.flip();
+                        /**
+                         * 此处要注意：千万不能直接操作buffer（因为write要用到buffer），否则客户端会阻塞并报错
+                         *     “java.util.concurrent.ExecutionException: java.io.IOException: 指定的网络名不再可用。”
+                         *
+                         * 缓冲区的复制有分两种：
+                         *      1、完全复制：调用duplicate()函数或者asReadOnlyBuffer()函数
+                         *      2、部分复制：调用slice函数
+                         *
+                         * duplicate()函数创建了一个与原始缓冲区相似的新缓冲区。
+                         *      每个缓冲区有自己的位置信息，但对缓冲区的修改都会映射到同一个底层数组上。
+                         */
+                        //复制一个缓冲区会创建一个新的 Buffer 对象，但并不复制数据。原始缓冲区和副本都会操作同样的数据元素。
+                        ByteBuffer duplicate = buffer.duplicate();
+                        CharBuffer decode = Charset.defaultCharset().decode(duplicate);
+                        System.out.println("收到客户端数据：" + decode);
+
+                        /**
+                         * 写回数据(get()会阻塞以等待io操作完成),实际上还是future里获得的
+                         */
+                        socketChannel.write(buffer).get();
+
+                        /**
+                         * 清理buffer，准备下一次read
+                         */
+                        if (buffer.hasRemaining()) {
+                            /**
+                             * 如果未写完，表示buffer还有数据，则只清理写过的数据
+                             * compact()方法只会清除已经读过的数据。
+                             * 任何未读的数据都被移到缓冲区的起始处，新写入的数据将放到缓冲区未读数据的后面。
+                             */
+                            buffer.compact();
+                        } else {
+                            buffer.clear();
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+
+
+服务端Future方式实现多客户端并发
+
+```
+public class ServerOnFuture {
+    static final int PORT = 10000;
+    static final String IP = "localhost";
+    //无界线程池
+    static ExecutorService taskExecutorService = Executors.newCachedThreadPool();
+    static ByteBuffer buffer = ByteBuffer.allocateDirect(1024);
+
+    public static void main(String[] args) {
+        try (AsynchronousServerSocketChannel serverSocketChannel = AsynchronousServerSocketChannel.open()) {
+            serverSocketChannel.bind(new InetSocketAddress(IP, PORT));
+            while (true) {
+                Future<AsynchronousSocketChannel> socketChannelFuture = serverSocketChannel.accept();
+                try {
+                    final AsynchronousSocketChannel socketChannel = socketChannelFuture.get();
+                    /**
+                     * 创建一个具有回调的线程
+                     */
+                    Callable<String> worker = new Callable<String>() {
+                        @Override
+                        public String call() throws Exception {
+                            while (socketChannel.read(buffer).get() != -1) {
+                                buffer.flip();
+                                ByteBuffer duplicate = buffer.duplicate();
+                                CharBuffer decode = Charset.defaultCharset().decode(duplicate);
+                                System.out.println(decode.toString());
+                                socketChannel.write(buffer).get();
+                                if (buffer.hasRemaining()) {
+                                    buffer.compact();
+                                } else {
+                                    buffer.clear();
+                                }
+                            }
+                            socketChannel.close();
+                            return "服务端反馈信息：收到";
+                        }
+                    };
+                    /**
+                     * 将线程提交到线程池
+                     */
+                    taskExecutorService.submit(worker);
+                    //获取线程数
+                    System.out.println(((ThreadPoolExecutor) taskExecutorService).getActiveCount());
+                } catch (InterruptedException | ExecutionException e) {
+                    /**
+                     * 出现异常，关闭线程池
+                     */
+                    taskExecutorService.shutdown();
+                    /**
+                     * boolean isTerminated()
+                     *      若关闭后所有任务都已完成，则返回true。
+                     *      注意除非首先调用shutdown或shutdownNow，否则isTerminated永不为true。
+                     */
+                    while (!taskExecutorService.isTerminated()) {
+                    }
+                    //跳出循环，结束程序
+                    break;
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+> 可以看到，以上两个客户端虽然是异步的，但是都是返回future对象使用get等待异步结果。本质上还是阻塞的
+
+客户端
+
+```
+public class ClientOnFuture {
+    static final int PORT = 8088;
+    static final String IP = "localhost";
+    static ByteBuffer buffer = ByteBuffer.allocateDirect(1024);
+
+    public static void main(String[] args) {
+        //尝试创建AsynchronousSocketChannel
+        try (AsynchronousSocketChannel socketChannel = AsynchronousSocketChannel.open()) {
+            //获取连接
+            Future<Void> connect = socketChannel.connect(new InetSocketAddress(IP, PORT));
+            //返回连接状态
+            Void aVoid = connect.get();
+            //返回null表示连接成功
+            if (aVoid == null) {
+                /**
+                 * 向服务端发送数据
+                 */
+                Future<Integer> write = socketChannel.write(ByteBuffer.wrap("客户端说：我连接成功了！".getBytes()));
+                Integer integer = write.get();
+                System.out.println("服务端接收的字节长度：" + integer);
+                /**
+                 * 接收服务端数据
+                 */
+                while (socketChannel.read(buffer).get() != -1) {
+                    buffer.flip();
+                    CharBuffer decode = Charset.defaultCharset().decode(buffer);
+                    System.out.println(decode.toString());
+                    if (buffer.hasRemaining()) {
+                        buffer.compact();
+                    } else {
+                        buffer.clear();
+                    }
+                    int r = new Random().nextInt(10);
+                    if (r == 5) {
+                        System.out.println("客户端关闭！");
+                        break;
+                    } else {
+                        /**
+                         * 如果在频繁调用write()的时候，在上一个操作没有写完的情况下，
+                         * 调用write会触发WritePendingException异常
+                         *
+                         * 应此此处最好在调用write()之后调用get()阻塞以便确认io操作完成
+                         */
+                        socketChannel.write(ByteBuffer.wrap(("客户端发送的数据:" + r).getBytes())).get();
+                    }
+                }
+            } else {
+                System.out.println("无法建立连接!");
+            }
+        } catch (Exception e) {
+            System.out.println("出错了！");
+        }
+    }
+}
+```
+
+客户端没啥需要讲的，主要也还是用到了`AsynchronousSocketChannel`，实现异步。
+
+> 下面我们来看下异步非阻塞，也就是基于回调的AIO实现方式
+
+服务端:
+
+```
+public class ServerOnCompletionHandler {
+    static final int PORT = 8088;
+    static final String IP = "localhost";
+
+    public static void main(String[] args) {
+        //打开通道
+        try (final AsynchronousServerSocketChannel serverSocketChannel = AsynchronousServerSocketChannel.open()) {
+            //创建服务
+            serverSocketChannel.bind(new InetSocketAddress(IP, PORT));
+            //接收客户端连接
+            serverSocketChannel.accept(null, new CompletionHandler<AsynchronousSocketChannel, Void>() {
+                final ByteBuffer buffer = ByteBuffer.allocateDirect(1024);
+
+                @Override
+                public void completed(AsynchronousSocketChannel socketChannel, Void attachment) {
+                    /**
+                     * 注意接收一个连接之后，紧接着可以接收下一个连接，所以必须再次调用accept方法
+                     * AsynchronousSocketChannel就代表该CompletionHandler处理器在处理连接成功时的result（AsynchronousSocketChannel的实例）
+                     */
+                    serverSocketChannel.accept(null, this);
+                    try {
+                        while (socketChannel.read(buffer).get() != -1) {
+                            buffer.flip();
+                            final ByteBuffer duplicate = buffer.duplicate();
+                            final CharBuffer decode = Charset.defaultCharset().decode(duplicate);
+                            System.out.println(decode.toString());
+                            socketChannel.write(buffer).get();  //get()用于阻塞使IO操作完成
+                            if (buffer.hasRemaining()) {
+                                buffer.compact();
+                            } else {
+                                buffer.clear();
+                            }
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    } finally {
+                        try {
+                            socketChannel.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+
+                @Override
+                public void failed(Throwable exc, Void attachment) {
+                    /**
+                     * 失败后也需要接收下一个连接
+                     */
+                    serverSocketChannel.accept(null, this);
+                    System.out.println("连接失败！");
+                }
+            });
+
+            //主要是阻塞作用，因为AIO是异步的，所以此处不阻塞的话，主线程很快执行完毕，并会关闭通道
+            System.in.read();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+可以看到重写了`completed`和`failed`方法。当被调用时IO操作已经完成了。
+
+客户端:
+
+```
+/**
+ * 客户端
+ */
+public class ClientOnCompletionHandler {
+    static final int PORT = 8088;
+    static final String IP = "localhost";
+
+    public static void main(String[] args) {
+        try (final AsynchronousSocketChannel socketChannel = AsynchronousSocketChannel.open()) {
+            socketChannel.connect(new InetSocketAddress(IP, PORT), null, new CompletionHandler<Void, Void>() {
+                final ByteBuffer buffer = ByteBuffer.allocateDirect(1024);
+
+                @Override
+                public void completed(Void result, Void attachment) {
+                    try {
+                        socketChannel.write(ByteBuffer.wrap("Hello Server！".getBytes())).get();
+                        while (socketChannel.read(buffer).get() != -1) {
+                            buffer.flip();
+                            ByteBuffer duplicate = buffer.duplicate();
+                            CharBuffer decode = Charset.defaultCharset().decode(duplicate);
+                            System.out.println(decode.toString());
+                            buffer.clear();
+                            int r = new Random().nextInt(10);
+                            socketChannel.write(ByteBuffer.wrap("客户端消息：".concat(String.valueOf(r)).getBytes())).get();
+                            Thread.sleep(3000);
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    } finally {
+                        try {
+                            socketChannel.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+
+                @Override
+                public void failed(Throwable exc, Void attachment) {
+                    System.out.println("连接失败！");
+                }
+            });
+
+            //主要是阻塞作用，因为AIO是异步的，所以此处不阻塞的话，主线程很快执行完毕，并会关闭通道
+            System.in.read();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+主线程需要`  System.in.read()`无限阻塞,除非读取到键盘输入。以等待IO内容不停的被调用。以上两个都是单线程
+
+> 下面我们来看下自定义group完成多线程处理
+
+`AsynchronousChannelGroup`是异步`Channel`的分组管理器，它可以实现资源共享。
+
+创建`AsynchronousChannelGroup`时，需要传入一个`ExecutorService`，也就是绑定一个线程池。
+该线程池负责两个任务：`处理IO事件`和`触发CompletionHandler回调接口`。
+
+每个异步通道都必须关联一个组，要么是`系统默认组`，要么是`用户创建的组`。
+如果不使用group参数，java使用一个默认的系统范围的组对象。
+
+异步IO模型中，用户线程直接使用`内核提供的异步IO API`发起read请求。
+发起后`立即返回`，`继续执行用户线程代码`。
+
+此时用户线程已经将调用的`AsynchronousOperation`和`CompletionHandler`注册到内核，然后`操作系统开启独立的内核线程去处理IO操作`。
+当read请求的数据到达时，由`内核负责读取socket中的数据`，并`写入用户指定的缓冲区`中。
+最后内核将read的数据和用户线程注册的`CompletionHandler`分发给`内部Proactor`，`Proactor`将IO完成的信息`通知给用户线程`（一般通过调用用户线程注册的完成事件处理函数），完成异步IO。
+
+```
+public class ServerOnReaderAndWriterForMultiClients {
+    static final int PORT = 8088;
+    static final String IP = "localhost";
+    static AsynchronousChannelGroup threadGroup = null;
+    static ExecutorService executorService = Executors.newCachedThreadPool();
+
+    public static void main(String[] args) {
+        try {
+            threadGroup = AsynchronousChannelGroup.withCachedThreadPool(executorService, 5);
+            //或者使用指定数量的线程池
+            //threadGroup = AsynchronousChannelGroup.withFixedThreadPool(5, Executors.defaultThreadFactory());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        try (AsynchronousServerSocketChannel serverSocketChannel = AsynchronousServerSocketChannel.open(threadGroup)) {
+            serverSocketChannel.bind(new InetSocketAddress(IP, PORT));
+            serverSocketChannel.accept(serverSocketChannel, new CompletionHandler<AsynchronousSocketChannel, AsynchronousServerSocketChannel>() {
+                final ByteBuffer buffer = ByteBuffer.allocateDirect(1024);
+
+                @Override
+                public void completed(AsynchronousSocketChannel socketChannel, AsynchronousServerSocketChannel attachment) {
+                    serverSocketChannel.accept(null, this);
+                    try {
+                        while (socketChannel.read(buffer).get() != -1) {
+                            buffer.flip();
+                            final ByteBuffer duplicate = buffer.duplicate();
+                            final CharBuffer decode = Charset.defaultCharset().decode(duplicate);
+                            System.out.println(decode.toString());
+                            socketChannel.write(buffer).get();  //get()用于阻塞使IO操作完成
+                            if (buffer.hasRemaining()) {
+                                buffer.compact();
+                            } else {
+                                buffer.clear();
+                            }
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    } finally {
+                        try {
+                            socketChannel.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+
+                @Override
+                public void failed(Throwable exc, AsynchronousServerSocketChannel attachment) {
+                    serverSocketChannel.accept(null, this);
+                    System.out.println("连接失败！");
+                }
+            });
+
+            //此方法一直阻塞，直到组终止、超时或当前线程中断
+            threadGroup.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
