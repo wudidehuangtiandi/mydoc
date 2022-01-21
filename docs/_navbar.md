@@ -23,6 +23,7 @@
 * 其它
   * [frp内网穿透](/other/frp)
   * [log4j2 JNDI注入漏洞](/other/log4j2jndi)
+  * [关于druid连接池的一些探究](/other/druid)
 
 * [作者相关](#Introduction)
   
