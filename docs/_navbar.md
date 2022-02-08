@@ -4,8 +4,8 @@
   * [线程池的正确创建](/java/threadpool)
   * [AIO,BIO,NIO](/java/io)
   * [springmvc源码解析](/java/springmvc)
+  * [常见的设计模式](/java/designpattern)
  
-
 * [前端](/javascript/empty)
 
 * [中间件](/mw/empty)
