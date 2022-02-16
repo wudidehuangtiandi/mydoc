@@ -8,7 +8,8 @@
  
 * [前端](/javascript/empty)
 
-* [中间件](/mw/empty)
+* 中间件
+  * [redis](/mw/redis)
 
 * [数据库](/dbs/empty)
 

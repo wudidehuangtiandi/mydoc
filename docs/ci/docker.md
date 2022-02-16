@@ -438,6 +438,28 @@ docker run -d \
 
 > 由于采用了HOST模式，端口需要和宿主机不能冲突
 
+7.rabbitmq
+
+```
+docker pull rabbitmq
+docker pull rabbitmq:management 
+需要注意的是，docker pull rabbitmq (镜像未配有控制台)，docker pull rabbitmq:management (镜像配有控制台)。
+
+docker run -d --name rabbitmq \
+--network host \
+-v /home/rabbitmq/data:/var/lib/rabbitmq/mnesia \
+-v /home/rabbitmq/conf:/etc/rabbitmq \
+-v /home/rabbitmq/log:/var/log/rabbitmq \
+-e RABBITMQ_DEFAULT_USER=wudidehuangtiandi \
+-e RABBITMQ_DEFAULT_PASS=gc123456 \
+rabbitmq:management 
+
+打开控制台
+docker exec -it rabbitmq rabbitmq-plugins enable rabbitmq_management
+```
+
+
+
 ## 四.关于dockerfile及dockerhub
 
 本文不作深入探讨，这块知识逻辑等待学习，记录下曾经接触过的部分内容
