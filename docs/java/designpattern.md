@@ -193,10 +193,268 @@ public enum Singleton {
 
 
 
+## 工厂模式
+
+>工厂模式（Factory Pattern）是 Java 中最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。
+>
+>在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。
+
+**意图：**定义一个创建对象的接口，让其子类自己决定实例化哪一个工厂类，工厂模式使其创建过程延迟到子类进行。
+
+**主要解决：**主要解决接口选择的问题。
+
+**何时使用：**我们明确地计划不同条件下创建不同实例时。
+
+**如何解决：**让其子类实现工厂接口，返回的也是一个抽象的产品。
+
+**关键代码：**创建过程在其子类执行。
+
+**应用实例：** 1、您需要一辆汽车，可以直接从工厂里面提货，而不用去管这辆汽车是怎么做出来的，以及这个汽车里面的具体实现。 2、Hibernate 换数据库只需换方言和驱动就可以。
+
+我们来对工厂模式做一个简单的实现
+
+我们创建一个接口，三个实现类（一个动物接口，三个小动物，他们都有个功能，会叫）
+
+```Java
+public interface Animal {
+    void call();
+}
 
 
-## 
+public class Cat implements Animal{
+    @Override
+    public void call() {
+        System.out.println("喵");
+    }
+}
+
+public class Dog implements Animal{
+    @Override
+    public void call() {
+        System.out.println("汪");
+    }
+}
+
+public class Pig implements Animal{
+    @Override
+    public void call() {
+        System.out.println("哼唧哼唧");
+    }
+}
+```
+
+比如上面这样，这时候我们可以搞一个动物工厂，里面有个getAnimal方法，专门对外提供小动物
+
+```Java
+public class AnimalFactory {
+    public Animal getAnimal(String type){
+        if(type == null){
+            return null;
+        }
+        if(type.equalsIgnoreCase("CAT")){
+            return new Cat();
+        }else if(type.equalsIgnoreCase("DOG")){
+            return new Dog();
+        }else if(type.equalsIgnoreCase("Pig")){
+            return new Pig();
+        }
+        return null;
+    }
+}
+```
+
+这时候有个老头想养一只小动物，他就可以调用这个工厂
+
+```JAVA
+public class OldMan {
+    public static void main(String[] args) {
+        AnimalFactory animalFactory = new AnimalFactory();
+        //这时候他就拥有了一只小猪
+        Animal pig = animalFactory.getAnimal("PIG");
+        //然后他从没听过猪叫,想让小猪叫唤两声，于是调用call方法，就可以发出 哼唧哼唧 的声音了
+        pig.call();
+    }
+}
+```
+
+这个工厂不仅可以提供给老头，要是有别人想养小猫，也是一样的
+
+> 做个总结的话就是，你想要的只要问工厂要就好了，你无需关心你要的东西是怎么产生的。典型应用就是mybatis或者hibernate这种切换数据库的时候，只需要换驱动即可。还有redisTemplate啊，这种可以接入不同的连接池，都使用了工厂模式
+
+
+
+## 抽象工厂模式
+
+>抽象工厂模式（Abstract Factory Pattern）是围绕一个超级工厂创建其他工厂。该超级工厂又称为其他工厂的工厂。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。
+>
+>在抽象工厂模式中，接口是负责创建一个相关对象的工厂，不需要显式指定它们的类。每个生成的工厂都能按照工厂模式提供对象。
+
+**意图：**提供一个创建一系列相关或相互依赖对象的接口，而无需指定它们具体的类。
+
+**主要解决：**主要解决接口选择的问题。
+
+**何时使用：**系统的产品有多于一个的产品族，而系统只消费其中某一族的产品。
+
+**如何解决：**在一个产品族里面，定义多个产品。
+
+**关键代码：**在一个工厂里聚合多个同类产品。
+
+**应用实例：**工作了，为了参加一些聚会，肯定有两套或多套衣服吧，比如说有商务装（成套，一系列具体产品）、时尚装（成套，一系列具体产品），甚至对于一个家庭来说，可能有商务女装、商务男装、时尚女装、时尚男装，这些也都是成套的，即一系列具体产品。假设一种情况（现实中是不存在的，要不然，没法进入共产主义了，但有利于说明抽象工厂模式），在您的家中，某一个衣柜（具体工厂）只能存放某一种这样的衣服（成套，一系列具体产品），每次拿这种成套的衣服时也自然要从这个衣柜中取出了。用 OOP 的思想去理解，所有的衣柜（具体工厂）都是衣柜类的（抽象工厂）某一个，而每一件成套的衣服又包括具体的上衣（某一具体产品），裤子（某一具体产品），这些具体的上衣其实也都是上衣（抽象产品），具体的裤子也都是裤子（另一个抽象产品）。
+
+抽象工厂的话，其实就是将诸多工厂抽离成一个抽象工厂，可以自行选择使用哪个工厂
+
+我们来做一下简单的实现
+
+这里我们借用本工厂模式的几个类，加入这时候这个老头不但想养小动物，还想去买一辆新车，体验一下速度与激情
+
+我们增加一个接口，三个实现类
+
+```java
+public interface Car {
+    //油门到底
+    void Hong();
+}
+
+//卡罗拉
+public class Corolla implements Car {
+    @Override
+    public void Hong() {
+        System.out.println("时速60");
+    }
+}
+
+//大宝马
+public class Bmw implements Car {
+    @Override
+    public void Hong() {
+        System.out.println("时速100");
+    }
+}
+
+//布加迪
+public class Bugatti implements Car{
+    @Override
+    public void Hong() {
+        System.out.println("时速400");
+    }
+}
+```
+
+这时候我们搞一个工厂，啥车都能造的那种
+
+```Java
+public class CarFactory extends AbstractFactory{
+
+    @Override
+    public Animal getAnimal(String animal) {
+        return null;
+    }
+
+    @Override
+    public Car getCar(String carType){
+        if(carType==null){
+            return null;
+        }
+        if(carType.equalsIgnoreCase("COROLLA")){
+            return new Corolla();
+        }else if(carType.equalsIgnoreCase("BMW")){
+            return new Bmw();
+        }else if(carType.equalsIgnoreCase("BUGATTI")){
+            return new Bugatti();
+        }
+        return null;
+    }
+```
+
+对于上面那个宠物制造厂我们也改造下
+
+```Java
+public class AnimalFactory extends AbstractFactory {
+    public Animal getAnimal(String type){
+        if(type == null){
+            return null;
+        }
+        if(type.equalsIgnoreCase("CAT")){
+            return new Cat();
+        }else if(type.equalsIgnoreCase("DOG")){
+            return new Dog();
+        }else if(type.equalsIgnoreCase("Pig")){
+            return new Pig();
+        }
+        return null;
+    }
+
+    @Override
+    public Car getCar(String car) {
+        return null;
+    }
+}
+```
+
+这时候，有个单位吊炸天，专门为老年人提供各种业务，它拥有造车厂，还有宠物制造厂。
+
+```java
+public abstract class AbstractFactory {
+    public abstract Animal getAnimal(String animal);
+    public abstract Car getCar(String car);
+}
+```
+
+但是由于经济不景气，这些工厂并不是一直开着的，老头需要什么就开什么，如下所示
+
+```java
+public class FactoryProducer {
+    public static AbstractFactory getFactory(String choice){
+        if(choice.equalsIgnoreCase("CAR")){
+            return new CarFactory();
+        } else if(choice.equalsIgnoreCase("ANIMAL")){
+            return new AnimalFactory();
+        }
+        return null;
+    }
+}
+```
+
+这时候老头来了，他突然觉得不想养猪了，想开布加迪
+
+```java
+public class OldMan {
+    public static void main(String[] args) {
+        //高速公司需求，公司激活汽车生产线
+        AbstractFactory car = FactoryProducer.getFactory("CAR");
+        //根据老头的需求生产布加迪
+        Car bugatti = car.getCar("bugatti");
+        //轰油门，输出时速400，老头爽到了
+        bugatti.Hong();
+    }
+}
+```
+
+> 可见抽象工厂就是将工厂类进行抽离，根部不同的内容激活不同的工厂来生产不同的东西。
+
+
+
+## 代理模式
+
+> 代理模式作为java开发应该非常熟悉了，用于对类进行增强或者变更，可以用一个内存中产生的类代表另一个类的功能。
+
+**意图：**为其他对象提供一种代理以控制对这个对象的访问。
+
+**主要解决：**在直接访问对象时带来的问题，比如说：要访问的对象在远程的机器上。在面向对象系统中，有些对象由于某些原因（比如对象创建开销很大，或者某些操作需要安全控制，或者需要进程外的访问），直接访问会给使用者或者系统结构带来很多麻烦，我们可以在访问此对象时加上一个对此对象的访问层。
+
+**何时使用：**想在访问一个类时做一些控制。
+
+**如何解决：**增加中间层。
+
+**关键代码：**实现与被代理类组合。
+
+**应用实例：** spring aop。
+
+
+
 待续
+
+
 
 
 单例模式，工厂模式，代理模式，建造者模式，适配器模式
