@@ -22,6 +22,7 @@
   * [docker](/ci/docker)
   * [elk](/ci/elk)
   * [jenkins](/ci/jenkins)
+  * [k8s](/ci/k8s)
 
 * 其它
   * [frp内网穿透](/other/frp)
