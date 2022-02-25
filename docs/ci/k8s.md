@@ -1594,3 +1594,406 @@ pod-hook-exec   1/1     Running   7 (6m59s ago)   73m   10.244.1.59   node1   <n
 postStart...
 ```
 
+
+
+> 容器探测
+
+容器探测用于检测容器中的应用实例是否正常工作，是保障业务可用性的一种传统机制。如果经过探测，实例的状态不符合预期，那么kubernetes就会把该问题实例" 摘除 "，不承担业务流量。kubernetes提供了两种探针来实现容器探测，分别是：
+
+- liveness probes：存活性探针，用于检测应用实例当前是否处于正常运行状态，如果不是，k8s会重启容器
+- readiness probes：就绪性探针，用于检测应用实例当前是否可以接收请求，如果不能，k8s不会转发流量
+
+livenessProbe 决定是否重启容器，readinessProbe 决定是否将请求转发给容器。
+
+上面两种探针目前均支持三种探测方式：
+
+- Exec命令：在容器内执行一次命令，如果命令执行的退出码为0，则认为程序正常，否则不正常
+
+  ```yaml
+  ……
+    livenessProbe:
+      exec:
+        command:
+        - cat
+        - /tmp/healthy
+  ……
+  ```
+
+- TCPSocket：将会尝试访问一个用户容器的端口，如果能够建立这条连接，则认为程序正常，否则不正常
+
+  ```yaml
+  ……      
+    livenessProbe:
+      tcpSocket:
+        port: 8080
+  ……
+  ```
+
+- HTTPGet：调用容器内Web应用的URL，如果返回的状态码在200和399之间，则认为程序正常，否则不正常
+
+  ```yaml
+  ……
+    livenessProbe:
+      httpGet:
+        path: / #URI地址
+        port: 80 #端口号
+        host: 127.0.0.1 #主机地址
+        scheme: HTTP #支持的协议，http或者https
+  ……
+  ```
+
+我们做个演示
+
+创建`pod-liveness-exec.yaml`
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-liveness-exec
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    ports: 
+    - name: nginx-port
+      containerPort: 80
+    livenessProbe:
+      exec:
+        command: ["/bin/cat","/tmp/hello.txt"] # 执行一个查看文件的命令
+```
+
+创建pod，观察效果
+
+```shell
+kubectl create -f pod-liveness-exec.yaml
+
+#查看详情
+kubectl describe pods pod-liveness-exec -n default
+
+Events:
+  Type     Reason     Age               From               Message
+  ----     ------     ----              ----               -------
+  Normal   Scheduled  32s               default-scheduler  Successfully assigned default/pod-liveness-exec to node2
+  Normal   Pulled     2s (x2 over 31s)  kubelet            Container image "nginx:1.17.1" already present on machine
+  Normal   Created    2s (x2 over 31s)  kubelet            Created container nginx
+  Normal   Started    2s (x2 over 31s)  kubelet            Started container nginx
+  Warning  Unhealthy  2s (x3 over 22s)  kubelet            Liveness probe failed: /bin/cat: /tmp/hello.txt: No such file or directory
+  Normal   Killing    2s                kubelet            Container nginx failed liveness probe, will be restarted
+
+#我们可以看到，没有这个文件
+# 观察上面的信息就会发现nginx容器启动之后就进行了健康检查
+# 检查失败之后，容器被kill掉，然后尝试进行重启（这是重启策略的作用，后面讲解）
+# 稍等一会之后，再观察pod信息，就可以看到RESTARTS不再是0，而是一直增长
+
+kubectl get pods pod-liveness-exec -n default
+
+NAME                READY   STATUS    RESTARTS      AGE
+pod-liveness-exec   1/1     Running   3 (20s ago)   110s
+
+# 当然接下来，可以修改成一个存在的文件，比如/tmp/hello.txt，再试，结果就正常了......
+```
+
+接下来的两种我们就不一一尝试了，我们贴一下配置
+
+```yaml
+#httpget
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-liveness-httpget
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    ports:
+    - name: nginx-port
+      containerPort: 80
+    livenessProbe:
+      httpGet:  # 其实就是访问http://127.0.0.1:80/hello  
+        scheme: HTTP #支持的协议，http或者https
+        port: 80 #端口号
+        path: /hello #URI地址
+        
+# 当然接下来，可以修改成一个可以访问的路径path，比如/，再试，结果就正常了......
+```
+
+```yaml
+#tcpsocket
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-liveness-tcpsocket
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    ports: 
+    - name: nginx-port
+      containerPort: 80
+    livenessProbe:
+      tcpSocket:
+        port: 8080 # 尝试访问8080端口
+        
+# 当然接下来，可以修改成一个可以访问的端口，比如80，再试，结果就正常了......
+```
+
+至此，已经使用liveness Probe演示了三种探测方式，但是查看livenessProbe的子属性，会发现除了这三种方式，还有一些其他的配置，在这里一并解释下：
+
+```shell
+[root@master pod]# kubectl explain pod.spec.containers.livenessProbe
+FIELDS:
+   exec <Object>  
+   tcpSocket    <Object>
+   httpGet      <Object>
+   initialDelaySeconds  <integer>  # 容器启动后等待多少秒执行第一次探测
+   timeoutSeconds       <integer>  # 探测超时时间。默认1秒，最小1秒
+   periodSeconds        <integer>  # 执行探测的频率。默认是10秒，最小1秒
+   failureThreshold     <integer>  # 连续探测失败多少次才被认定为失败。默认是3。最小值是1
+   successThreshold     <integer>  # 连续探测成功多少次才被认定为成功。默认是1
+```
+
+举个栗子
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-liveness-httpget
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    ports:
+    - name: nginx-port
+      containerPort: 80
+    livenessProbe:
+      httpGet:
+        scheme: HTTP
+        port: 80 
+        path: /
+      initialDelaySeconds: 30 # 容器启动后30s开始探测
+      timeoutSeconds: 5 # 探测超时时间为5s
+```
+
+
+
+> 重启策略
+
+一旦容器探测出现了问题，kubernetes就会对容器所在的Pod进行重启，其实这是由pod的重启策略决定的，pod的重启策略有 3 种，分别如下：
+
+- Always ：容器失效时，自动重启该容器，这也是默认值。
+- OnFailure ： 容器终止运行且退出码不为0时重启
+- Never ： 不论状态为何，都不重启该容器
+
+重启策略适用于pod对象中的所有容器，首次需要重启的容器，将在其需要时立即进行重启，随后再次需要重启的操作将由kubelet延迟一段时间后进行，且反复的重启操作的延迟时长以此为10s、20s、40s、80s、160s和300s，300s是最大延迟时长。
+
+我们做个演示
+
+创建`pod-restartpolicy.yaml`
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-restartpolicy
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    ports:
+    - name: nginx-port
+      containerPort: 80
+    livenessProbe:
+      httpGet:
+        scheme: HTTP
+        port: 80
+        path: /hello
+  restartPolicy: Never # 设置重启策略为Never
+```
+
+```shell
+kubectl create -f pod-restartpolicy.yaml
+
+#查看Pod详情，发现nginx容器失败
+kubectl  describe pods pod-restartpolicy  -n default
+
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  34m                default-scheduler  Successfully assigned default/pod-restartpolicy to node1
+  Normal   Pulled     34m                kubelet            Container image "nginx:1.17.1" already present on machine
+  Normal   Created    34m                kubelet            Created container nginx
+  Normal   Started    34m                kubelet            Started container nginx
+  Warning  Unhealthy  33m (x3 over 33m)  kubelet            Liveness probe failed: HTTP probe failed with statuscode: 404
+  Normal   Killing    33m                kubelet            Stopping container nginx
+
+#过了一活我们查看下详情
+[root@master pod]# kubectl  get pods pod-restartpolicy -n default
+NAME                READY   STATUS      RESTARTS   AGE
+pod-restartpolicy   0/1     Completed   0          35m
+
+#发现并没有重启
+```
+
+#### 5.1.3 pod的调度
+
+在默认情况下，一个Pod在哪个Node节点上运行，是由Scheduler组件采用相应的算法计算出来的，这个过程是不受人工控制的。但是在实际使用中，这并不满足的需求，因为很多情况下，我们想控制某些Pod到达某些节点上，那么应该怎么做呢？这就要求了解kubernetes对Pod的调度规则，kubernetes提供了四大类调度方式：
+
+- 自动调度：运行在哪个节点上完全由Scheduler经过一系列的算法计算得出
+- 定向调度：NodeName、NodeSelector
+- 亲和性调度：NodeAffinity、PodAffinity、PodAntiAffinity
+- 污点（容忍）调度：Taints、Toleration
+
+> 定向调度
+
+定向调度，指的是利用在pod上声明nodeName或者nodeSelector，以此将Pod调度到期望的node节点上。注意，这里的调度是强制的，这就意味着即使要调度的目标Node不存在，也会向上面进行调度，只不过pod运行失败而已。
+
+首先是NodeName
+
+我们做下演示
+
+创建`pod-nodename.yaml`如下
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-nodename
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+  nodeName: node2 # 指定调度到node2节点上
+```
+
+```shell
+kubectl create -f pod-nodename.yaml
+
+#可以看到真的去了node2
+[root@master pod]# kubectl get pods pod-nodename -n default -o wide
+NAME           READY   STATUS    RESTARTS   AGE   IP            NODE    NOMINATED NODE   READINESS GATES
+pod-nodename   1/1     Running   0          42s   10.244.2.20   node2   <none>           <none>
+
+# 接下来，删除pod，修改nodeName的值为node3（并没有node3节点）
+[root@master pod]# kubectl delete -f pod-nodename.yaml
+pod "pod-nodename" deleted
+[root@master pod]# vim pod-nodename.yaml
+[root@master pod]# kubectl create -f pod-nodename.yaml
+pod/pod-nodename created
+
+#再次查看，发现已经向Node3节点调度，但是由于不存在node3节点，所以pod无法正常运行
+[root@master pod]# kubectl get pods pod-nodename -n default -o wide
+NAME           READY   STATUS    RESTARTS   AGE   IP       NODE    ......
+pod-nodename   0/1     Pending   0          6s    <none>   node3   ......  
+```
+
+下面是nodeselector
+
+NodeSelector用于将pod调度到添加了指定标签的node节点上。它是通过kubernetes的label-selector机制实现的，也就是说，在pod创建之前，会由scheduler使用MatchNodeSelector调度策略进行label匹配，找出目标node，然后将pod调度到目标节点，该匹配规则是强制约束。
+
+1 首先分别为node节点添加标签
+
+```shell
+[root@master pod]# kubectl label nodes node1 nodeenv=pro
+node/node2 labeled
+[root@master pod]# kubectl label nodes node2 nodeenv=test
+node/node2 labeled
+```
+
+2 创建一个`pod-nodeselector.yaml`文件，并使用它创建Pod
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-nodeselector
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+  nodeSelector: 
+    nodeenv: pro # 指定调度到具有nodeenv=pro标签的节点上
+```
+
+```shell
+kubectl create -f pod-nodeselector.yaml
+
+#我们可以看到真的在node1上
+[root@master pod]# kubectl get pods pod-nodeselector -n default -o wide
+NAME               READY   STATUS    RESTARTS   AGE   IP            NODE    NOMINATED NODE   READINESS GATES
+pod-nodeselector   1/1     Running   0          14s   10.244.1.63   node1   <none>           <none>
+
+# 接下来，删除pod，修改nodeSelector的值为nodeenv: xxxx（不存在打有此标签的节点）
+[root@master pod]# kubectl delete -f pod-nodeselector.yaml
+pod "pod-nodeselector" deleted
+[root@master pod]# vim pod-nodeselector.yaml
+[root@master pod]# kubectl create -f pod-nodeselector.yaml
+pod/pod-nodeselector created
+
+#再次查看，发现pod无法正常运行,Node的值为none
+[root@master pod]# kubectl get pods  pod-nodeselector -n default -o wide
+NAME               READY   STATUS    RESTARTS   AGE    IP       NODE     NOMINATED NODE   READINESS GATES
+pod-nodeselector   0/1     Pending   0          110s   <none>   <none>   <none>           <none>
+
+
+# 查看详情,发现node selector匹配失败的提示
+[root@master pod]# kubectl describe pods pod-nodeselector -n default
+.......
+Events:
+  Type     Reason            Age                  From               Message
+  ----     ------            ----                 ----               -------
+  Warning  FailedScheduling  38s (x3 over 2m43s)  default-scheduler  0/3 nodes are available: 1 node(s) had taint {node-role.kubernetes.io/master: }, that the pod didn't tolerate, 2 node(s) didn't match Pod's node affinity/selector.
+#可见这个node没有匹配到这里和上面有所区别
+```
+
+
+
+> 亲和性调度
+
+上面，我们介绍了两种定向调度的方式，使用起来非常方便，但是也有一定的问题，那就是如果没有满足条件的Node，那么Pod将不会被运行，即使在集群中还有可用Node列表也不行，这就限制了它的使用场景。
+
+基于上面的问题，kubernetes还提供了一种亲和性调度（Affinity）。它在NodeSelector的基础之上的进行了扩展，可以通过配置的形式，实现优先选择满足条件的Node进行调度，如果没有，也可以调度到不满足条件的节点上，使调度更加灵活。
+
+Affinity主要分为三类：
+
+- nodeAffinity(node亲和性）: 以node为目标，解决pod可以调度到哪些node的问题
+- podAffinity(pod亲和性) : 以pod为目标，解决pod可以和哪些已存在的pod部署在同一个拓扑域中的问题
+- podAntiAffinity(pod反亲和性) : 以pod为目标，解决pod不能和哪些已存在pod部署在同一个拓扑域中的问题
+
+关于亲和性(反亲和性)使用场景的说明：
+
+**亲和性**：如果两个应用频繁交互，那就有必要利用亲和性让两个应用的尽可能的靠近，这样可以减少因网络通信而带来的性能损耗。
+
+**反亲和性**：当应用的采用多副本部署时，有必要采用反亲和性让各个应用实例打散分布在各个node上，这样可以提高服务的高可用性。
+
+
+
+首先来看一下`NodeAffinity`
+
+```markdown
+pod.spec.affinity.nodeAffinity
+  requiredDuringSchedulingIgnoredDuringExecution  Node节点必须满足指定的所有规则才可以，相当于硬限制
+    nodeSelectorTerms  节点选择列表
+      matchFields   按节点字段列出的节点选择器要求列表
+      matchExpressions   按节点标签列出的节点选择器要求列表(推荐)
+        key    键
+        values 值
+        operat or 关系符 支持Exists, DoesNotExist, In, NotIn, Gt, Lt
+  preferredDuringSchedulingIgnoredDuringExecution 优先调度到满足指定的规则的Node，相当于软限制 (倾向)
+    preference   一个节点选择器项，与相应的权重相关联
+      matchFields   按节点字段列出的节点选择器要求列表
+      matchExpressions   按节点标签列出的节点选择器要求列表(推荐)
+        key    键
+        values 值
+        operator 关系符 支持In, NotIn, Exists, DoesNotExist, Gt, Lt
+	weight 倾向权重，在范围1-100。
+```
+
