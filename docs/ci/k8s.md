@@ -2161,7 +2161,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: pod-podantiaffinity-required
-  namespace: dev
+  namespace: default
 spec:
   containers:
   - name: nginx
@@ -2242,7 +2242,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: pod-toleration
-  namespace: dev
+  namespace: default
 spec:
   containers:
   - name: nginx
@@ -2282,7 +2282,7 @@ Pod控制器是管理pod的中间层，使用Pod控制器之后，只需要告�
 
 
 
-**ReplicaSet**
+#### 5.2.1 ReplicaSet
 
 ReplicaSet的主要作用是**保证一定数量的pod正常运行**，它会持续监听这些Pod的运行状态，一旦Pod发生故障，就会重启或重建。同时它还支持对pod数量的扩缩容和镜像版本的升降级。
 
@@ -2425,7 +2425,7 @@ replicaset.apps "pc-replicaset" deleted
 
 
 
-**Deployment(Deploy)**
+#### 5.2.2 Deployment(Deploy)
 
 为了更好的解决服务编排的问题，kubernetes在V1.2版本开始，引入了Deployment控制器。值得一提的是，这种控制器并不直接管理pod，而是通过管理ReplicaSet来简介管理Pod，即：Deployment管理ReplicaSet，ReplicaSet管理Pod。所以Deployment比ReplicaSet功能更加强大。我们可以看下下面这张图。
 
@@ -2548,6 +2548,7 @@ strategy：指定新的Pod替换旧的Pod的策略， 支持两个属性：
 这个我们不演示了，写两个配置文件看下
 
 ```yaml
+#滚动更新
 spec:
   strategy: # 策略
     type: RollingUpdate # 滚动更新策略
@@ -2557,8 +2558,99 @@ spec:
 ```
 
 ```yaml
+#重建更新
 spec:
   strategy: # 策略
     type: Recreate # 重建更新
 ```
+
+```shell
+#更新
+kubectl set image deployment pc-deployment nginx=nginx:1.17.2 -n default
+```
+
+
+
+ 版本回退
+
+deployment支持版本升级过程中的暂停、继续功能以及版本回退等诸多功能，下面具体来看.
+
+kubectl rollout： 版本升级相关功能，支持下面的选项：
+
+- status	显示当前升级状态
+- history   显示 升级历史记录
+- pause    暂停版本升级过程
+- resume   继续已经暂停的版本升级过程
+- restart    重启版本升级过程
+- undo 回滚到上一级版本（可以使用--to-revision回滚到指定版本）
+
+```shell
+#显示当前升级版本的状态
+kubectl rollout status deploy pc-deployment -n default
+
+#查看升级的历史记录
+kubectl rollout history deploy pc-deployment -n default
+
+REVISION  CHANGE-CAUSE
+1         kubectl create --filename=pc-deployment.yaml --record=true
+2         kubectl create --filename=pc-deployment.yaml --record=true
+#可以看到有一次升级记录
+
+#看下版本
+[root@master pod]# kubectl get deploy -n default -o wide
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS   IMAGES         SELECTOR
+pc-deployment   2/2     2            2           4m44s   nginx        nginx:1.17.2   app=nginx-pod
+
+# 版本回滚
+# 这里直接使用--to-revision=1回滚到了1版本， 如果省略这个选项，就是回退到上个版本
+kubectl rollout undo deployment pc-deployment --to-revision=1 -n default
+
+# 再看下版本发现回退了
+[root@master pod]# kubectl get deploy -n default -o wide
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS   IMAGES         SELECTOR
+pc-deployment   2/2     2            2           5m42s   nginx        nginx:1.17.1   app=nginx-pod
+```
+
+
+
+金丝雀发布
+
+Deployment控制器支持控制更新过程中的控制，如“暂停(pause)”或“继续(resume)”更新操作。
+
+比如有一批新的Pod资源创建完成后立即暂停更新过程，此时，仅存在一部分新版本的应用，主体部分还是旧的版本。然后，再筛选一小部分的用户请求路由到新版本的Pod应用，继续观察能否稳定地按期望的方式运行。确定没问题之后再继续完成余下的Pod资源滚动更新，否则立即回滚更新操作。这就是所谓的金丝雀发布。
+
+```shell
+#更新版本，并且暂停
+kubectl set image deploy pc-deployment nginx=nginx:1.17.4 -n default && kubectl rollout pause deployment pc-deployment  -n default
+#我们看下更新情况，可以看到暂停了
+kubectl rollout status deploy pc-deployment -n default
+#继续更新
+kubectl rollout resume deploy pc-deployment -n default
+#发现更新成功
+[root@master ~]# kubectl get rs -n default -o wide
+NAME                       DESIRED   CURRENT   READY   AGE    CONTAINERS   IMAGES         SELECTOR
+pc-deployment-6f7f65b46d   0         0         0       3h1m   nginx        nginx:1.17.1   app=nginx-pod,pod-template-hash=6f7f65b46d
+pc-deployment-86f4996797   0         0         0       178m   nginx        nginx:1.17.2   app=nginx-pod,pod-template-hash=86f4996797
+pc-deployment-cf7c57879    2         2         2       12m    nginx        nginx:1.17.4   app=nginx-pod,pod-template-hash=cf7c57879
+```
+
+
+
+删除操作
+
+```shell
+# 删除deployment，其下的rs和pod也将被删除
+[root@master pod]# kubectl delete -f pc-deployment.yaml
+deployment.apps "pc-deployment" deleted
+```
+
+
+
+#### 5.2.3 Horizontal Pod Autoscaler(HPA)
+
+在以上的两个控制器中，我们已经可以实现通过手工执行`kubectl scale`命令实现Pod扩容或缩容，但是这显然不符合Kubernetes的定位目标--自动化、智能化。 Kubernetes期望可以实现通过监测Pod的使用情况，实现pod数量的自动调整，于是就产生了Horizontal Pod Autoscaler（HPA）这种控制器。
+
+HPA可以获取每个Pod利用率，然后和HPA中定义的指标进行对比，同时计算出需要伸缩的具体值，最后实现Pod的数量的调整。其实HPA与之前的Deployment一样，也属于一种Kubernetes资源对象，它通过追踪分析RC控制的所有目标Pod的负载变化情况，来确定是否需要针对性地调整目标Pod的副本数，这是HPA的实现原理。
+
+![avatar](https://picture.zhanghong110.top/docsify/20200608155858271.png)
 
