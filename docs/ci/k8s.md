@@ -2,7 +2,14 @@
 
 # k8s的初步搭建及使用
 
->本次以单master，双node作为演示。仅用于初步的学习参考。
+>本次以单master，双node作为演示。仅用于初步的学习参考。版本信息如下
+
+```shell
+[root@master ~]# kubectl version
+Client Version: version.Info{Major:"1", Minor:"23", GitVersion:"v1.23.4", GitCommit:"e6c093d87ea4cbb530a7b2ae91e54c0842d8308a", GitTreeState:"clean", BuildDate:"2022-02-16T12:38:05Z", GoVersion:"go1.17.7", Compiler:"gc", Platform:"linux/amd64"}
+Server Version: version.Info{Major:"1", Minor:"23", GitVersion:"v1.23.4", GitCommit:"e6c093d87ea4cbb530a7b2ae91e54c0842d8308a", GitTreeState:"clean", BuildDate:"2022-02-16T12:32:02Z", GoVersion:"go1.17.7", Compiler:"gc", Platform:"linux/amd64"}
+
+```
 
 ## 一.搭建
 
@@ -562,7 +569,7 @@ scp -r  $HOME/.kube  root@192.168.191.131:/root
 
 查询资源 使用命令式对象管理 kubectl get(describe) 资源名称
 
-## 四.nginx集群搭建
+## 四.基本概念与nginx的集群搭建
 
 > 我们现在开始尝试搭建一个nginx集群,并能够对其进行访问,在此期间我们需要了解很多概念，掌握一些使用方法。
 
@@ -1854,7 +1861,7 @@ pod-restartpolicy   0/1     Completed   0          35m
 
 定向调度，指的是利用在pod上声明nodeName或者nodeSelector，以此将Pod调度到期望的node节点上。注意，这里的调度是强制的，这就意味着即使要调度的目标Node不存在，也会向上面进行调度，只不过pod运行失败而已。
 
-首先是NodeName
+**首先是NodeName**
 
 我们做下演示
 
@@ -1894,7 +1901,7 @@ NAME           READY   STATUS    RESTARTS   AGE   IP       NODE    ......
 pod-nodename   0/1     Pending   0          6s    <none>   node3   ......  
 ```
 
-下面是nodeselector
+**下面是nodeselector**
 
 NodeSelector用于将pod调度到添加了指定标签的node节点上。它是通过kubernetes的label-selector机制实现的，也就是说，在pod创建之前，会由scheduler使用MatchNodeSelector调度策略进行label匹配，找出目标node，然后将pod调度到目标节点，该匹配规则是强制约束。
 
@@ -1976,7 +1983,9 @@ Affinity主要分为三类：
 
 
 
-首先来看一下`NodeAffinity`
+**nodeAffinity**
+
+首先来看一下`NodeAffinity`,这里又分为两种
 
 ```markdown
 pod.spec.affinity.nodeAffinity
@@ -1995,5 +2004,561 @@ pod.spec.affinity.nodeAffinity
         values 值
         operator 关系符 支持In, NotIn, Exists, DoesNotExist, Gt, Lt
 	weight 倾向权重，在范围1-100。
+```
+
+```shell
+关系符的使用说明:
+
+- matchExpressions:
+  - key: nodeenv              # 匹配存在标签的key为nodeenv的节点
+    operator: Exists
+  - key: nodeenv              # 匹配标签的key为nodeenv,且value是"xxx"或"yyy"的节点
+    operator: In
+    values: ["xxx","yyy"]
+  - key: nodeenv              # 匹配标签的key为nodeenv,且value大于"xxx"的节点
+    operator: Gt
+    values: "xxx"
+```
+
+如果没看懂不要经我们先用`requiredDuringSchedulingIgnoredDuringExecution`写个示例
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-nodeaffinity-required
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+  affinity:  #亲和性设置
+    nodeAffinity: #设置node亲和性
+      requiredDuringSchedulingIgnoredDuringExecution: # 硬限制
+        nodeSelectorTerms:
+        - matchExpressions: # 匹配env的值在["xxx","yyy"]中的标签
+          - key: nodeenv
+            operator: In
+            values: ["xxx","yyy"]
+```
+
+这个我们就不作演示了，效果就是匹配标签`nodeenv`有xxx或者yyy的，没有的话就会报错，一直处于pending状态，提示发现调度失败，提示node选择失败
+
+下面看下`preferredDuringSchedulingIgnoredDuringExecution`的示例
+
+```shell
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-nodeaffinity-preferred
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+  affinity:  #亲和性设置
+    nodeAffinity: #设置node亲和性
+      preferredDuringSchedulingIgnoredDuringExecution: # 软限制
+      - weight: 1
+        preference:
+          matchExpressions: # 匹配env的值在["xxx","yyy"]中的标签(当前环境没有)
+          - key: nodeenv
+            operator: In
+            values: ["xxx","yyy"]
+```
+
+可以发现虽然没有xxx,yyy但是还是可以运行成功，这就是软限制和硬限制的区别
+
+```
+NodeAffinity规则设置的注意事项：
+    1 如果同时定义了nodeSelector和nodeAffinity，那么必须两个条件都得到满足，Pod才能运行在指定的Node上
+    2 如果nodeAffinity指定了多个nodeSelectorTerms，那么只需要其中一个能够匹配成功即可
+    3 如果一个nodeSelectorTerms中有多个matchExpressions ，则一个节点必须满足所有的才能匹配成功
+    4 如果一个pod所在的Node在Pod运行期间其标签发生了改变，不再符合该Pod的节点亲和性需求，则系统将忽略此变化
+```
+
+
+
+**podAffinity**
+
+PodAffinity主要实现以运行的Pod为参照，实现让新创建的Pod跟参照pod在一个区域的功能。
+
+首先看一下配置项
+
+```markdown
+pod.spec.affinity.podAffinity
+  requiredDuringSchedulingIgnoredDuringExecution  硬限制
+    namespaces       指定参照pod的namespace
+    topologyKey      指定调度作用域
+    labelSelector    标签选择器
+      matchExpressions  按节点标签列出的节点选择器要求列表(推荐)
+        key    键
+        values 值
+        operator 关系符 支持In, NotIn, Exists, DoesNotExist.
+      matchLabels    指多个matchExpressions映射的内容
+  preferredDuringSchedulingIgnoredDuringExecution 软限制
+    podAffinityTerm  选项
+      namespaces      
+      topologyKey
+      labelSelector
+        matchExpressions  
+          key    键
+          values 值
+          operator
+        matchLabels 
+    weight 倾向权重，在范围1-100
+```
+
+```markdown
+topologyKey用于指定调度时作用域,例如:
+    如果指定为kubernetes.io/hostname，那就是以Node节点为区分范围
+	如果指定为beta.kubernetes.io/os,则以Node节点的操作系统类型来区分
+```
+
+可以看到也是分两种
+
+首先看下`requiredDuringSchedulingIgnoredDuringExecution`的示例
+
+配置表达的意思是：新Pod必须要与拥有标签nodeenv=xxx或者nodeenv=yyy的pod在同一Node上，显然现在没有这样pod。
+
+```yaml 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-podaffinity-required
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+  affinity:  #亲和性设置
+    podAffinity: #设置pod亲和性
+      requiredDuringSchedulingIgnoredDuringExecution: # 硬限制
+      - labelSelector:
+          matchExpressions: # 匹配env的值在["xxx","yyy"]中的标签
+          - key: podenv
+            operator: In
+            values: ["xxx","yyy"]
+        topologyKey: kubernetes.io/hostname
+```
+
+当前如果没有这样的pod（拥有标签nodeenv=xxx或者nodeenv=yyy）则会一直处于pending状态
+
+如果有则会运行
+
+`preferredDuringSchedulingIgnoredDuringExecution`的话一个意思，只是不再强制要求即使没有这样的pod当前pod也能运行起来，这里就不做示范了
+
+
+
+**PodAntiAffinity**
+
+PodAntiAffinity主要实现以运行的Pod为参照，让新创建的Pod跟参照pod不在一个区域中的功能。
+
+它的配置方式和选项跟PodAffinty是一样的，这里不再做详细解释，直接示范。
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-podantiaffinity-required
+  namespace: dev
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+  affinity:  #亲和性设置
+    podAntiAffinity: #设置pod亲和性
+      requiredDuringSchedulingIgnoredDuringExecution: # 硬限制
+      - labelSelector:
+          matchExpressions: # 匹配podenv的值在["pro"]中的标签
+          - key: podenv
+            operator: In
+            values: ["pro"]
+        topologyKey: kubernetes.io/hostname
+```
+
+上面配置表达的意思是：新Pod必须要与拥有标签nodeenv=pro的pod不在同一Node上。当然也是分为硬限制和软限制。软限制我们也不做示范了和上面一个意思。
+
+
+
+> 污点和容忍调度
+
+**污点调度**
+
+Node被设置上污点之后就和Pod之间存在了一种相斥的关系，进而拒绝Pod调度进来，甚至可以将已经存在的Pod驱逐出去。
+
+污点的格式为：`key=value:effect`, key和value是污点的标签，effect描述污点的作用，支持如下三个选项：
+
+- PreferNoSchedule：kubernetes将尽量避免把Pod调度到具有该污点的Node上，除非没有其他节点可调度
+- NoSchedule：kubernetes将不会把Pod调度到具有该污点的Node上，但不会影响当前Node上已存在的Pod
+- NoExecute：kubernetes将不会把Pod调度到具有该污点的Node上，同时也会将Node上已存在的Pod驱离
+
+
+
+使用kubectl设置和去除污点的命令示例如下：
+
+![avatar](https://picture.zhanghong110.top/docsify/20200605021831545.png)
+
+```
+# 设置污点
+kubectl taint nodes node1 key=value:effect
+
+# 去除污点
+kubectl taint nodes node1 key:effect-
+
+# 去除所有污点
+kubectl taint nodes node1 key-
+```
+
+
+
+> 使用kubeadm搭建的集群，默认就会给master节点添加一个污点标记,所以pod就不会调度到master节点上。
+
+
+
+**容忍调度**
+
+上面介绍了污点的作用，我们可以在node上添加污点用于拒绝pod调度上来，但是如果就是想将一个pod调度到一个有污点的node上去，这时候应该怎么做呢？这就要使用到**容忍**。
+
+> 污点就是拒绝，容忍就是忽略，Node通过污点拒绝pod调度上去，Pod通过容忍忽略拒绝
+
+我们看下容忍的命令
+
+```shell
+[root@master pod]# kubectl explain pod.spec.tolerations
+......
+FIELDS:
+   key       # 对应着要容忍的污点的键，空意味着匹配所有的键
+   value     # 对应着要容忍的污点的值
+   operator  # key-value的运算符，支持Equal和Exists（默认）
+   effect    # 对应污点的effect，空意味着匹配所有影响
+   tolerationSeconds   # 容忍时间, 当effect为NoExecute时生效，表示pod在Node上的停留时间
+```
+
+我们示例一个yaml
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-toleration
+  namespace: dev
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+  tolerations:      # 添加容忍
+  - key: "tag"        # 要容忍的污点的key
+    operator: "Equal" # 操作符
+    value: "example"    # 容忍的污点的value
+    effect: "NoExecute"   # 添加容忍的规则，这里必须和标记的污点规则相同
+```
+
+
+
+
+
+### 5.2 pod控制器
+
+Pod是kubernetes的最小管理单元，在kubernetes中，按照pod的创建方式可以将其分为两类：
+
+- 自主式pod：kubernetes直接创建出来的Pod，这种pod删除后就没有了，也不会重建
+- 控制器创建的pod：kubernetes通过控制器创建的pod，这种pod删除了之后还会自动重建
+
+Pod控制器是管理pod的中间层，使用Pod控制器之后，只需要告诉Pod控制器，想要多少个什么样的Pod就可以了，它会创建出满足条件的Pod并确保每一个Pod资源处于用户期望的目标状态。如果Pod资源在运行中出现故障，它会基于指定策略重新编排Pod。
+
+
+
+在kubernetes中，有很多类型的pod控制器，每种都有自己的适合的场景，常见的有下面这些：
+
+- ReplicationController：比较原始的pod控制器，已经被废弃，由ReplicaSet替代
+- ReplicaSet：保证副本数量一直维持在期望值，并支持pod数量扩缩容，镜像版本升级
+- Deployment：通过控制ReplicaSet来控制Pod，并支持滚动升级、回退版本
+- Horizontal Pod Autoscaler：可以根据集群负载自动水平调整Pod的数量，实现削峰填谷
+- DaemonSet：在集群中的指定Node上运行且仅运行一个副本，一般用于守护进程类的任务
+- Job：它创建出来的pod只要完成任务就立即退出，不需要重启或重建，用于执行一次性任务
+- Cronjob：它创建的Pod负责周期性任务控制，不需要持续后台运行
+- StatefulSet：管理有状态应用
+
+
+
+**ReplicaSet**
+
+ReplicaSet的主要作用是**保证一定数量的pod正常运行**，它会持续监听这些Pod的运行状态，一旦Pod发生故障，就会重启或重建。同时它还支持对pod数量的扩缩容和镜像版本的升降级。
+
+ReplicaSet的资源清单文件：
+
+```yaml
+apiVersion: apps/v1 # 版本号
+kind: ReplicaSet # 类型       
+metadata: # 元数据
+  name: # rs名称 
+  namespace: # 所属命名空间 
+  labels: #标签
+    controller: rs
+spec: # 详情描述
+  replicas: 3 # 副本数量
+  selector: # 选择器，通过它指定该控制器管理哪些pod
+    matchLabels:      # Labels匹配规则
+      app: nginx-pod
+    matchExpressions: # Expressions匹配规则
+      - {key: app, operator: In, values: [nginx-pod]}
+  template: # 模板，当副本数量不足时，会根据下面的模板创建pod副本
+    metadata:
+      labels:
+        app: nginx-pod
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.17.1
+        ports:
+        - containerPort: 80
+```
+
+在这里面，需要新了解的配置项就是`spec`下面几个选项：
+
+- replicas：指定副本数量，其实就是当前rs创建出来的pod的数量，默认为1
+
+- selector：选择器，它的作用是建立pod控制器和pod之间的关联关系，采用的Label Selector机制
+
+  在pod模板上定义label，在控制器上定义选择器，就可以表明当前控制器能管理哪些pod了
+
+- template：模板，就是当前控制器创建pod所使用的模板板，里面其实就是前一章学过的pod的定义
+
+我们来创建一个实列看下
+
+创建`pc-replicaset.yaml`文件，内容如下：
+
+```yaml
+apiVersion: apps/v1
+kind: ReplicaSet   
+metadata:
+  name: pc-replicaset
+  namespace: default
+spec:
+  replicas: 3
+  selector: 
+    matchLabels:
+      app: nginx-pod
+  template:
+    metadata:
+      labels:
+        app: nginx-pod
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.17.1
+```
+
+```shell
+kubectl create -f pc-replicaset.yaml
+
+# 查看rs
+# DESIRED:期望副本数量  
+# CURRENT:当前副本数量  
+# READY:已经准备好提供服务的副本数量
+[root@master pod]# kubectl get rs pc-replicaset -n default -o wide
+NAME            DESIRED   CURRENT   READY   AGE     CONTAINERS   IMAGES         SELECTOR
+pc-replicaset   3         3         3       2m15s   nginx        nginx:1.17.1   app=nginx-pod
+
+# 查看当前控制器创建出来的pod
+# 这里发现控制器创建出来的pod的名称是在控制器名称后面拼接了-xxxxx随机码
+[root@master pod]# kubectl get pod -A
+NAMESPACE     NAME                             READY   STATUS             RESTARTS          AGE
+default       pc-replicaset-d8bg8              1/1     Running            0                 2m24s
+default       pc-replicaset-hqf7f              1/1     Running            0                 2m24s
+default       pc-replicaset-zg4vj              1/1     Running            0                 2m24s
+```
+
+```shell
+# 扩容缩容
+# 编辑rs的副本数量，修改spec:replicas: 4即可
+kubectl edit rs pc-replicaset -n default
+
+#可以看到变成了4
+[root@master pod]# kubectl get rs -n default -o wide
+NAME            DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES         SELECTOR
+pc-replicaset   4         4         4       16m   nginx        nginx:1.17.1   app=nginx-pod
+
+# 当然也可以直接使用命令实现
+# 使用scale命令实现扩缩容， 后面--replicas=n直接指定目标数量即可
+[root@master pod]# kubectl scale rs pc-replicaset --replicas=2 -n default
+replicaset.apps/pc-replicaset scaled
+
+#看一下
+[root@master pod]# kubectl get rs -n default -o wide
+NAME            DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES         SELECTOR
+pc-replicaset   2         2         2       22m   nginx        nginx:1.17.1   app=nginx-pod
+```
+
+```shell
+# 镜像的版本变更
+# 编辑rs的容器镜像 - image: nginx:1.17.2
+[root@k8s-master01 ~]# kubectl edit rs pc-replicaset -n default
+
+# 同样的道理，也可以使用命令完成这个工作
+# kubectl set image rs rs名称 容器=镜像版本 -n namespace
+kubectl set image rs pc-replicaset nginx=nginx:1.17.2  -n default
+
+#可以看到两种方式都已经是换了版本了，达到了一样的效果
+[root@master pod]# kubectl get rs -n default -o wide
+NAME            DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES         SELECTOR
+pc-replicaset   4         4         4       18m   nginx        nginx:1.17.2   app=nginx-pod
+```
+
+```shell
+# 删除ReplicaSet
+# 使用kubectl delete命令会删除此RS以及它管理的Pod
+# 在kubernetes删除RS前，会将RS的replicasclear调整为0，等待所有的Pod被删除后，在执行RS对象的删除
+[root@master pod]# kubectl delete rs pc-replicaset -n default
+replicaset.apps "pc-replicaset" deleted
+
+# 如果希望仅仅删除RS对象（保留Pod），可以使用kubectl delete命令时添加--cascade=false选项（不推荐）。
+[root@master pod]# kubectl delete rs pc-replicaset -n default --cascade=false
+replicaset.apps "pc-replicaset" deleted
+[root@master pod]# kubectl get pods -n default
+
+# 也可以使用yaml直接删除(推荐)
+[root@master pod]# kubectl delete -f pc-replicaset.yaml
+replicaset.apps "pc-replicaset" deleted
+```
+
+
+
+**Deployment(Deploy)**
+
+为了更好的解决服务编排的问题，kubernetes在V1.2版本开始，引入了Deployment控制器。值得一提的是，这种控制器并不直接管理pod，而是通过管理ReplicaSet来简介管理Pod，即：Deployment管理ReplicaSet，ReplicaSet管理Pod。所以Deployment比ReplicaSet功能更加强大。我们可以看下下面这张图。
+
+![avatar](https://picture.zhanghong110.top/docsify/20200612005524778.png)
+
+Deployment主要功能有下面几个：
+
+- 支持ReplicaSet的所有功能
+- 支持发布的停止、继续
+- 支持滚动升级和回滚版本
+
+```yaml
+apiVersion: apps/v1 # 版本号
+kind: Deployment # 类型       
+metadata: # 元数据
+  name: # rs名称 
+  namespace: # 所属命名空间 
+  labels: #标签
+    controller: deploy
+spec: # 详情描述
+  replicas: 3 # 副本数量
+  revisionHistoryLimit: 3 # 保留历史版本
+  paused: false # 暂停部署，默认是false
+  progressDeadlineSeconds: 600 # 部署超时时间（s），默认是600
+  strategy: # 策略
+    type: RollingUpdate # 滚动更新策略
+    rollingUpdate: # 滚动更新
+      maxSurge: 30% # 最大额外可以存在的副本数，可以为百分比，也可以为整数
+      maxUnavailable: 30% # 最大不可用状态的 Pod 的最大值，可以为百分比，也可以为整数
+  selector: # 选择器，通过它指定该控制器管理哪些pod
+    matchLabels:      # Labels匹配规则
+      app: nginx-pod
+    matchExpressions: # Expressions匹配规则
+      - {key: app, operator: In, values: [nginx-pod]}
+  template: # 模板，当副本数量不足时，会根据下面的模板创建pod副本
+    metadata:
+      labels:
+        app: nginx-pod
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.17.1
+        ports:
+        - containerPort: 80
+```
+
+下面我们试一试，创建`pc-deployment.yaml`，内容如下：
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment      
+metadata:
+  name: pc-deployment
+  namespace: default
+spec: 
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx-pod
+  template:
+    metadata:
+      labels:
+        app: nginx-pod
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.17.1
+```
+
+```shell
+kubectl create -f pc-deployment.yaml --record=true
+
+
+# 查看deployment
+# UP-TO-DATE 最新版本的pod的数量
+# AVAILABLE  当前可用的pod的数量
+[root@master pod]# kubectl get deploy pc-deployment -n default
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+pc-deployment   3/3     3            3           24s
+
+# 查看rs
+# 发现rs的名称是在原来deployment的名字后面添加了一个10位数的随机串
+[root@master pod]# kubectl get rs -n default
+NAME                       DESIRED   CURRENT   READY   AGE
+pc-deployment-6f7f65b46d   3         3         3       2m26s
+
+# 查看pod
+[root@master pod]#  kubectl get pods -n default
+NAME                             READY   STATUS             RESTARTS        AGE
+pc-deployment-6f7f65b46d-kj2sk   1/1     Running            0               2m57s
+pc-deployment-6f7f65b46d-ltt66   1/1     Running            0               2m57s
+pc-deployment-6f7f65b46d-pmlhj   1/1     Running            0               2m57s
+```
+
+```shell
+#扩容缩容
+#扩容
+kubectl scale deploy pc-deployment --replicas=5  -n default
+
+#查看deployment
+[root@master pod]# kubectl get deploy pc-deployment -n default
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+pc-deployment   5/5     5            5           4m32s
+
+#或者编辑副本数量都可以(注意是这个，直接改yml无效，上面也一样)
+kubectl edit deploy pc-deployment -n default
+```
+
+```markdown
+镜像更新
+strategy：指定新的Pod替换旧的Pod的策略， 支持两个属性：
+  type：指定策略类型，支持两种策略
+    Recreate：在创建出新的Pod之前会先杀掉所有已存在的Pod
+    RollingUpdate：滚动更新，就是杀死一部分，就启动一部分，在更新过程中，存在两个版本Pod
+  rollingUpdate：当type为RollingUpdate时生效，用于为RollingUpdate设置参数，支持两个属性：
+    maxUnavailable：用来指定在升级过程中不可用Pod的最大数量，默认为25%。
+    maxSurge： 用来指定在升级过程中可以超过期望的Pod的最大数量，默认为25%。
+```
+
+这个我们不演示了，写两个配置文件看下
+
+```yaml
+spec:
+  strategy: # 策略
+    type: RollingUpdate # 滚动更新策略
+    rollingUpdate:
+      maxSurge: 25% 
+      maxUnavailable: 25%
+```
+
+```yaml
+spec:
+  strategy: # 策略
+    type: Recreate # 重建更新
 ```
 
