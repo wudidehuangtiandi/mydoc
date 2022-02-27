@@ -161,7 +161,7 @@ systemctl restart docker
 
 ```
 # 初始化集群控制台 Control plane
-# 失败了可以用 kubeadm reset 重置
+# 失败了可以用 kubeadm reset 重置(如果部署过了要rm -rf $HOME/.kube/config ) 
 kubeadm init --image-repository=registry.aliyuncs.com/google_containers --apiserver-advertise-address=192.168.191.130 --service-cidr=10.96.0.0/12  --pod-network-cidr=10.244.0.0/16
 
 参数说明
@@ -176,6 +176,8 @@ kubeadm join 192.168.191.130:6443 --token 7g0jed.eldb436kh34xeuj0 \
 	--discovery-token-ca-cert-hash sha256:435f869461ee6290fbd350a48d93cfeeaafef5fa44e7fd8c09874a21731462a3
 表示成功，将该条命令保存下来
 # 忘记了重新获取：kubeadm token create --print-join-command
+
+
 ```
 
 12.仅主节点设置在本机的环境变量
@@ -802,7 +804,7 @@ kubectl create deployment 名称  [参数]
 # --replicas  指定创建pod数量
 # --namespace  指定namespace
 
-kubectl create deployment nginx --port=8 --replicas=3 --image=nginx:1.14-alpine -n default
+kubectl create deployment nginx --port=80 --replicas=3 --image=nginx:1.14-alpine -n default
 
 查看创建的Pod
 kubectl get pods -n default
@@ -2642,6 +2644,9 @@ pc-deployment-cf7c57879    2         2         2       12m    nginx        nginx
 # 删除deployment，其下的rs和pod也将被删除
 [root@master pod]# kubectl delete -f pc-deployment.yaml
 deployment.apps "pc-deployment" deleted
+
+#或者
+kubectl delete deploy [name] -n [namespace]
 ```
 
 
@@ -2653,4 +2658,425 @@ deployment.apps "pc-deployment" deleted
 HPA可以获取每个Pod利用率，然后和HPA中定义的指标进行对比，同时计算出需要伸缩的具体值，最后实现Pod的数量的调整。其实HPA与之前的Deployment一样，也属于一种Kubernetes资源对象，它通过追踪分析RC控制的所有目标Pod的负载变化情况，来确定是否需要针对性地调整目标Pod的副本数，这是HPA的实现原理。
 
 ![avatar](https://picture.zhanghong110.top/docsify/20200608155858271.png)
+
+这个我们来演示一下
+
+!>我们可以安装一个对应版本的metrics-server来收集集群资源使用情况，这里应为暂时没有有效的源所以先不装了
+
+我们直接测试，先闯将一个`pc-hpa-pod.yaml`
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: default
+spec:
+  strategy: # 策略
+    type: RollingUpdate # 滚动更新策略
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-pod
+  template:
+    metadata:
+      labels:
+        app: nginx-pod
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.17.1
+        resources: # 资源配额
+          limits:  # 限制资源（上限）
+            cpu: "1" # CPU限制，单位是core数
+          requests: # 请求资源（下限）
+            cpu: "100m"  # CPU限制，单位是core数
+```
+
+```shell
+#创建deployment
+kubectl create -f pc-hpa-pod.yaml
+#创建service
+kubectl expose deployment nginx --type=NodePort --port=80 -n default
+#查看
+kubectl get deployment,pod,svc -n default
+
+NAME                            READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/nginx           1/1     1            1           2m22s
+
+NAME                                READY   STATUS             RESTARTS          AGE
+pod/nginx-f87cbb8b5-2hp5n           1/1     Running            0                 2m22s
+
+NAME                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+service/nginx        NodePort    10.108.46.96   <none>        80:32723/TCP   63s
+```
+
+部署HPA，创建`pc-hpa.yaml`
+
+```yaml
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pc-hpa
+  namespace: default
+spec:
+  minReplicas: 1  #最小pod数量
+  maxReplicas: 10 #最大pod数量
+  targetCPUUtilizationPercentage: 3 # CPU使用率指标，注意这个百分之三是为了比较容易压测到
+  scaleTargetRef:   # 指定要控制的nginx信息
+    apiVersion:  /v1
+    kind: Deployment
+    name: nginx
+```
+
+```shell
+#启动
+kubectl create -f pc-hpa.yaml
+#查看HPA
+[root@master pod]# kubectl get hpa -n default
+NAME     REFERENCE          TARGETS        MINPODS   MAXPODS   REPLICAS   AGE
+pc-hpa   Deployment/nginx   <unknown>/3%   1         10        0          22s
+```
+
+压力测试
+
+```shell 
+#我们看下刚才哪个nginx到了哪个node上，可以看到是node1（这边的话service暴露了其实三个节点的IP都可以访问）
+[root@master pod]# kubectl get pod  nginx-f87cbb8b5-2hp5n  -n default -o wide
+NAME                    READY   STATUS    RESTARTS   AGE   IP             NODE    NOMINATED NODE   READINESS GATES
+nginx-f87cbb8b5-2hp5n   1/1     Running   0          20m   10.244.1.100   node1   <none>           <none>
+
+#我们对http://192.168.191.131:32723进行压力测试
+#看下结果
+#发现有问题，看来必须装那个插件，待续
+
+```
+
+#### 5.2.4 DaemonSet
+
+DaemonSet类型的控制器可以保证在集群中的每一台（或指定）节点上都运行一个副本。一般适用于日志收集、节点监控等场景。也就是说，如果一个Pod提供的功能是节点级别的（每个节点都需要且只需要一个），那么这类Pod就适合使用DaemonSet类型的控制器创建。
+
+
+
+![avatar](https://picture.zhanghong110.top/docsify/20200612010223537.png)
+
+DaemonSet控制器的特点：
+
+- 每当向集群中添加一个节点时，指定的 Pod 副本也将添加到该节点上
+- 当节点从集群中移除时，Pod 也就被垃圾回收了
+
+首先看下资源文件清单
+
+```yaml
+apiVersion: apps/v1 # 版本号
+kind: DaemonSet # 类型       
+metadata: # 元数据
+  name: # rs名称 
+  namespace: # 所属命名空间 
+  labels: #标签
+    controller: daemonset
+spec: # 详情描述
+  revisionHistoryLimit: 3 # 保留历史版本
+  updateStrategy: # 更新策略
+    type: RollingUpdate # 滚动更新策略
+    rollingUpdate: # 滚动更新
+      maxUnavailable: 1 # 最大不可用状态的 Pod 的最大值，可以为百分比，也可以为整数
+  selector: # 选择器，通过它指定该控制器管理哪些pod
+    matchLabels:      # Labels匹配规则
+      app: nginx-pod
+    matchExpressions: # Expressions匹配规则
+      - {key: app, operator: In, values: [nginx-pod]}
+  template: # 模板，当副本数量不足时，会根据下面的模板创建pod副本
+    metadata:
+      labels:
+        app: nginx-pod
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.17.1
+        ports:
+        - containerPort: 80
+```
+
+创建`pc-daemonset.yaml`做个演示
+
+```yaml
+apiVersion: apps/v1
+kind: DaemonSet      
+metadata:
+  name: pc-daemonset
+  namespace: default
+spec: 
+  selector:
+    matchLabels:
+      app: nginx-pod
+  template:
+    metadata:
+      labels:
+        app: nginx-pod
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.17.1
+```
+
+运行
+
+```shell
+kubectl create -f  pc-daemonset.yaml
+
+#查看下
+[root@master pod]# kubectl get ds -n default -o wide
+NAME           DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE   CONTAINERS   IMAGES         SELECTOR
+pc-daemonset   2         2         2       2            2           <none>          40s   nginx        nginx:1.17.1   app=nginx-pod
+
+#发现每个节点都有一个
+[root@master pod]# kubectl get pods -n default -o wide
+NAME                 READY   STATUS    RESTARTS   AGE    IP           NODE    NOMINATED NODE   READINESS GATES
+pc-daemonset-p88q8   1/1     Running   0          117s   10.244.1.2   node2   <none>           <none>
+pc-daemonset-tdffb   1/1     Running   0          117s   10.244.2.2   node1   <none>           <none>
+
+# 删除daemonset
+[root@k8s-master01 ~]# kubectl delete -f pc-daemonset.yaml
+daemonset.apps "pc-daemonset" deleted
+```
+
+#### 5.2.5 Job
+
+Job，主要用于负责**批量处理(一次要处理指定数量任务)**短暂的**一次性(每个任务仅运行一次就结束)**任务。Job特点如下：
+
+- 当Job创建的pod执行成功结束时，Job将记录成功结束的pod数量
+- 当成功结束的pod达到指定的数量时，Job将完成执行
+
+资源清单
+
+```yaml
+apiVersion: batch/v1 # 版本号
+kind: Job # 类型       
+metadata: # 元数据
+  name: # rs名称 
+  namespace: # 所属命名空间 
+  labels: #标签
+    controller: job
+spec: # 详情描述
+  completions: 1 # 指定job需要成功运行Pods的次数。默认值: 1
+  parallelism: 1 # 指定job在任一时刻应该并发运行Pods的数量。默认值: 1
+  activeDeadlineSeconds: 30 # 指定job可运行的时间期限，超过时间还未结束，系统将会尝试进行终止。
+  backoffLimit: 6 # 指定job失败后进行重试的次数。默认是6
+  manualSelector: true # 是否可以使用selector选择器选择pod，默认是false
+  selector: # 选择器，通过它指定该控制器管理哪些pod
+    matchLabels:      # Labels匹配规则
+      app: counter-pod
+    matchExpressions: # Expressions匹配规则
+      - {key: app, operator: In, values: [counter-pod]}
+  template: # 模板，当副本数量不足时，会根据下面的模板创建pod副本
+    metadata:
+      labels:
+        app: counter-pod
+    spec:
+      restartPolicy: Never # 重启策略只能设置为Never或者OnFailure
+      containers:
+      - name: counter
+        image: busybox:1.30
+        command: ["bin/sh","-c","for i in 9 8 7 6 5 4 3 2 1; do echo $i;sleep 2;done"]
+```
+
+```markdown
+关于重启策略设置的说明：
+    如果指定为OnFailure，则job会在pod出现故障时重启容器，而不是创建pod，failed次数不变
+    如果指定为Never，则job会在pod出现故障时创建新的pod，并且故障pod不会消失，也不会重启，failed次数加1
+    如果指定为Always的话，就意味着一直重启，意味着job任务会重复去执行了，当然不对，所以不能设置为Always
+```
+
+我们演示下
+
+创建`pc-job.yaml`
+
+```yaml
+apiVersion: batch/v1
+kind: Job      
+metadata:
+  name: pc-job
+  namespace: default
+spec:
+  manualSelector: true
+  selector:
+    matchLabels:
+      app: counter-pod
+  template:
+    metadata:
+      labels:
+        app: counter-pod
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: counter
+        image: busybox:1.30
+        command: ["bin/sh","-c","for i in 9 8 7 6 5 4 3 2 1; do echo $i;sleep 3;done"]
+```
+
+```shell
+kubectl create -f pc-job.yaml
+#查看下
+[root@master pod]# kubectl get job -n default -o wide  -w
+NAME     COMPLETIONS   DURATION   AGE   CONTAINERS   IMAGES         SELECTOR
+pc-job   1/1           29s        36s   counter      busybox:1.30   app=counter-pod
+
+#观察pod,可见任务结束后会变为Completed
+[root@master pod]# kubectl get pods -n default -w
+NAME           READY   STATUS      RESTARTS   AGE
+pc-job-xnlm5   0/1     Completed   0          90s
+
+# 接下来，调整下pod运行的总数量和并行数量 即：在spec下设置下面两个选项
+#  completions: 6 # 指定job需要成功运行Pods的次数为6
+#  parallelism: 3 # 指定job并发运行Pods的数量为3
+#  然后重新运行job，观察效果，此时会发现，job会每次运行3个pod，总共执行了6个pod
+[root@master pod]# kubectl get pods -n default -w
+NAME           READY   STATUS    RESTARTS   AGE
+pc-job-b2f26   1/1     Running   0          19s
+pc-job-f8nfr   1/1     Running   0          19s
+pc-job-htmwq   1/1     Running   0          19s
+pc-job-b2f26   0/1     Completed   0          29s
+pc-job-c4jbq   0/1     Pending     0          0s
+pc-job-c4jbq   0/1     Pending     0          0s
+pc-job-b2f26   0/1     Completed   0          29s
+pc-job-c4jbq   0/1     ContainerCreating   0          0s
+pc-job-c4jbq   1/1     Running             0          1s
+pc-job-f8nfr   0/1     Completed           0          30s
+pc-job-cwsxz   0/1     Pending             0          0s
+pc-job-cwsxz   0/1     Pending             0          0s
+pc-job-htmwq   0/1     Completed           0          30s
+pc-job-f8nfr   0/1     Completed           0          30s
+pc-job-cwsxz   0/1     ContainerCreating   0          0s
+pc-job-gl6ms   0/1     Pending             0          0s
+pc-job-gl6ms   0/1     Pending             0          0s
+pc-job-gl6ms   0/1     ContainerCreating   0          0s
+pc-job-htmwq   0/1     Completed           0          30s
+pc-job-gl6ms   1/1     Running             0          2s
+pc-job-cwsxz   1/1     Running             0          2s
+pc-job-c4jbq   0/1     Completed           0          28s
+pc-job-c4jbq   0/1     Completed           0          28s
+pc-job-cwsxz   0/1     Completed           0          28s
+pc-job-cwsxz   0/1     Completed           0          28s
+pc-job-gl6ms   0/1     Completed           0          28s
+pc-job-gl6ms   0/1     Completed           0          28s
+
+#删除
+kubectl delete -f pc-job.yaml
+```
+
+#### 5.2.6 CronJob(CJ)
+
+CronJob控制器以 Job控制器资源为其管控对象，并借助它管理pod资源对象，Job控制器定义的作业任务在其控制器资源创建之后便会立即执行，但CronJob可以以类似于Linux操作系统的周期性任务作业计划的方式控制其运行**时间点**及**重复运行**的方式。也就是说，**CronJob可以在特定的时间点(反复的)去运行job任务**。
+
+![avatar](https://picture.zhanghong110.top/docsify/20200618213149531.png)
+
+模板清单
+
+```yaml
+apiVersion: batch/v1beta1 # 版本号
+kind: CronJob # 类型       
+metadata: # 元数据
+  name: # rs名称 
+  namespace: # 所属命名空间 
+  labels: #标签
+    controller: cronjob
+spec: # 详情描述
+  schedule: # cron格式的作业调度运行时间点,用于控制任务在什么时间执行
+  concurrencyPolicy: # 并发执行策略，用于定义前一次作业运行尚未完成时是否以及如何运行后一次的作业
+  failedJobHistoryLimit: # 为失败的任务执行保留的历史记录数，默认为1
+  successfulJobHistoryLimit: # 为成功的任务执行保留的历史记录数，默认为3
+  startingDeadlineSeconds: # 启动作业错误的超时时长
+  jobTemplate: # job控制器模板，用于为cronjob控制器生成job对象;下面其实就是job的定义
+    metadata:
+    spec:
+      completions: 1
+      parallelism: 1
+      activeDeadlineSeconds: 30
+      backoffLimit: 6
+      manualSelector: true
+      selector:
+        matchLabels:
+          app: counter-pod
+        matchExpressions: 规则
+          - {key: app, operator: In, values: [counter-pod]}
+      template:
+        metadata:
+          labels:
+            app: counter-pod
+        spec:
+          restartPolicy: Never 
+          containers:
+          - name: counter
+            image: busybox:1.30
+            command: ["bin/sh","-c","for i in 9 8 7 6 5 4 3 2 1; do echo $i;sleep 20;done"]
+```
+
+```markdown
+需要重点解释的几个选项：
+schedule: cron表达式，用于指定任务的执行时间
+    */1    *      *    *     *
+    <分钟> <小时> <日> <月份> <星期>
+
+    分钟 值从 0 到 59.
+    小时 值从 0 到 23.
+    日 值从 1 到 31.
+    月 值从 1 到 12.
+    星期 值从 0 到 6, 0 代表星期日
+    多个时间可以用逗号隔开； 范围可以用连字符给出；*可以作为通配符； /表示每...
+concurrencyPolicy:
+    Allow:   允许Jobs并发运行(默认)
+    Forbid:  禁止并发运行，如果上一次运行尚未完成，则跳过下一次运行
+    Replace: 替换，取消当前正在运行的作业并用新作业替换它
+```
+
+我们演示下
+
+创建`pc-cronjob.yaml`
+
+```yaml
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: pc-cronjob
+  namespace: default
+  labels:
+    controller: cronjob
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    metadata:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: counter
+            image: busybox:1.30
+            command: ["bin/sh","-c","for i in 9 8 7 6 5 4 3 2 1; do echo $i;sleep 3;done"]
+```
+
+```shell
+kubectl create -f pc-cronjob.yaml
+
+#cronjob
+[root@master pod]# kubectl get cronjobs -n default
+NAME         SCHEDULE      SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+pc-cronjob   */1 * * * *   False     0        <none>          30s
+
+# 查看job
+[root@master pod]# kubectl get jobs -n default
+NAME                  COMPLETIONS   DURATION   AGE
+pc-cronjob-27432751   1/1           28s        38s
+
+#查看pod
+[root@master pod]# kubectl get pods -n default
+NAME                        READY   STATUS      RESTARTS   AGE
+pc-cronjob-27432751-bwdhw   0/1     Completed   0          74s
+pc-cronjob-27432752-x8g4g   1/1     Running     0          14s
+
+
+# 删除cronjob
+kubectl  delete -f pc-cronjob.yaml
+```
 
