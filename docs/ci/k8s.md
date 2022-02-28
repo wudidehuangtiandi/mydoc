@@ -2661,9 +2661,257 @@ HPA可以获取每个Pod利用率，然后和HPA中定义的指标进行对比�
 
 这个我们来演示一下
 
-!>我们可以安装一个对应版本的metrics-server来收集集群资源使用情况，这里应为暂时没有有效的源所以先不装了
 
-我们直接测试，先闯将一个`pc-hpa-pod.yaml`
+
+> 注意这是必须组件,根据我们的版本,搞一个对应版本的,我们这应该是0.6.X版本的
+
+```shell
+wget https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.6.1/components.yaml
+```
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    k8s-app: metrics-server
+  name: metrics-server
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    k8s-app: metrics-server
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+  name: system:aggregated-metrics-reader
+rules:
+- apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    k8s-app: metrics-server
+  name: system:metrics-server
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes/metrics
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    k8s-app: metrics-server
+  name: metrics-server-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: metrics-server
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    k8s-app: metrics-server
+  name: metrics-server:system:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: metrics-server
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    k8s-app: metrics-server
+  name: system:metrics-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:metrics-server
+subjects:
+- kind: ServiceAccount
+  name: metrics-server
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    k8s-app: metrics-server
+  name: metrics-server
+  namespace: kube-system
+spec:
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: https
+  selector:
+    k8s-app: metrics-server
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    k8s-app: metrics-server
+  name: metrics-server
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      k8s-app: metrics-server
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        k8s-app: metrics-server
+    spec:
+      hostNetwork: true
+      containers:
+      - args:
+        - --cert-dir=/tmp
+        - --secure-port=4443
+        - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+        - --kubelet-use-node-status-port
+        - --metric-resolution=15s
+        - --kubelet-preferred-address-types=InternalIP
+        - --kubelet-insecure-tls
+        image: k8s.gcr.io/metrics-server/metrics-server:v0.6.1
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /livez
+            port: https
+            scheme: HTTPS
+          periodSeconds: 10
+        name: metrics-server
+        ports:
+        - containerPort: 4443
+          name: https
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /readyz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-dir
+      nodeSelector:
+        kubernetes.io/os: linux
+      priorityClassName: system-cluster-critical
+      serviceAccountName: metrics-server
+      volumes:
+      - emptyDir: {}
+        name: tmp-dir
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  labels:
+    k8s-app: metrics-server
+  name: v1beta1.metrics.k8s.io
+spec:
+  group: metrics.k8s.io
+  groupPriorityMinimum: 100
+  insecureSkipTLSVerify: true
+  service:
+    name: metrics-server
+    namespace: kube-system
+  version: v1beta1
+  versionPriority: 100
+```
+
+这个修改了三处
+
+```markdown
+args添加了
+  - --kubelet-preferred-address-types=InternalIP
+  - --kubelet-insecure-tls
+增加hostNetwork: true
+```
+
+!>这边不修改HOST可能导致失败，镜像拉取问题
+
+```shell
+#进入/root运行
+kubectl apply -f components.yaml
+#成功运行
+[root@master ~]# kubectl get pods -A
+kube-system   metrics-server-755b5d5c47-z82l4   1/1     Running   0              42s
+#使用kubectl top node 查看资源使用情况
+[root@master pod]# kubectl top node
+NAME     CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%   
+master   208m         5%     947Mi           46%       
+node1    48m          1%     360Mi           16%       
+node2    38m          0%     336Mi           15% 
+[root@master pod]# kubectl top pod -n kube-system
+NAME                              CPU(cores)   MEMORY(bytes)   
+coredns-6d8c4cb4d-2zkjt           2m           16Mi            
+coredns-6d8c4cb4d-5pfmx           2m           16Mi            
+etcd-master                       24m          58Mi            
+kube-apiserver-master             59m          245Mi           
+kube-controller-manager-master    29m          49Mi            
+kube-flannel-ds-5wf72             2m           31Mi            
+kube-flannel-ds-b9d4n             4m           37Mi            
+kube-flannel-ds-pk86x             5m           21Mi            
+kube-proxy-2mttn                  3m           21Mi            
+kube-proxy-khblr                  1m           18Mi            
+kube-proxy-n2vcs                  1m           19Mi            
+kube-scheduler-master             6m           21Mi            
+metrics-server-755b5d5c47-z82l4   5m           21Mi
+```
+
+创建一个`pc-hpa-pod.yaml`
 
 ```yaml
 apiVersion: apps/v1
@@ -2674,7 +2922,7 @@ metadata:
 spec:
   strategy: # 策略
     type: RollingUpdate # 滚动更新策略
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: nginx-pod
@@ -2690,7 +2938,7 @@ spec:
           limits:  # 限制资源（上限）
             cpu: "1" # CPU限制，单位是core数
           requests: # 请求资源（下限）
-            cpu: "100m"  # CPU限制，单位是core数
+            cpu: "2"  # CPU限制，单位是core数
 ```
 
 ```shell
@@ -2701,14 +2949,16 @@ kubectl expose deployment nginx --type=NodePort --port=80 -n default
 #查看
 kubectl get deployment,pod,svc -n default
 
-NAME                            READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/nginx           1/1     1            1           2m22s
+[root@master pod]# kubectl get deployment,pod,svc -n default
+NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/nginx   1/1      1            1          57m
 
-NAME                                READY   STATUS             RESTARTS          AGE
-pod/nginx-f87cbb8b5-2hp5n           1/1     Running            0                 2m22s
+NAME                        READY   STATUS    RESTARTS   AGE
+pod/nginx-8b55d946b-jbzql   1/1     Running   0          4m5s
 
-NAME                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
-service/nginx        NodePort    10.108.46.96   <none>        80:32723/TCP   63s
+NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+service/kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP        26h
+service/nginx        NodePort    10.108.172.77   <none>        80:31666/TCP   57m
 ```
 
 部署HPA，创建`pc-hpa.yaml`
@@ -2722,9 +2972,9 @@ metadata:
 spec:
   minReplicas: 1  #最小pod数量
   maxReplicas: 10 #最大pod数量
-  targetCPUUtilizationPercentage: 3 # CPU使用率指标，注意这个百分之三是为了比较容易压测到
+  targetCPUUtilizationPercentage: 2 # CPU使用率指标，注意这个百分之2是为了比较容易压测到
   scaleTargetRef:   # 指定要控制的nginx信息
-    apiVersion:  /v1
+    apiVersion: apps/v1  #这个卡了我好久
     kind: Deployment
     name: nginx
 ```
@@ -2734,11 +2984,11 @@ spec:
 kubectl create -f pc-hpa.yaml
 #查看HPA
 [root@master pod]# kubectl get hpa -n default
-NAME     REFERENCE          TARGETS        MINPODS   MAXPODS   REPLICAS   AGE
-pc-hpa   Deployment/nginx   <unknown>/3%   1         10        0          22s
+NAME     REFERENCE          TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+pc-hpa   Deployment/nginx   0%/2%     1         10        1          9m19s
 ```
 
-压力测试
+压力测试,为了简单我们采用postman的runner而不是jmeter,简单循环一万次，目的是占用CPU超过百分之2
 
 ```shell 
 #我们看下刚才哪个nginx到了哪个node上，可以看到是node1（这边的话service暴露了其实三个节点的IP都可以访问）
@@ -2747,9 +2997,24 @@ NAME                    READY   STATUS    RESTARTS   AGE   IP             NODE  
 nginx-f87cbb8b5-2hp5n   1/1     Running   0          20m   10.244.1.100   node1   <none>           <none>
 
 #我们对http://192.168.191.131:32723进行压力测试
-#看下结果
-#发现有问题，看来必须装那个插件，待续
-
+#看下结果，感动哭了（一波N折），发现它随着压力动态扩容了
+[root@master pod]# kubectl get hpa -n default
+NAME     REFERENCE          TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+pc-hpa   Deployment/nginx   2%/2%     1         10        1          2m39s
+[root@master pod]# kubectl get pods -n default
+NAME                    READY   STATUS    RESTARTS   AGE
+nginx-8b55d946b-l95jj   1/1     Running   0          53m
+[root@master pod]# kubectl get hpa -n default
+NAME     REFERENCE          TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+pc-hpa   Deployment/nginx   3%/2%     1         10        1          2m42s
+[root@master pod]# kubectl get pods -n default
+NAME                    READY   STATUS    RESTARTS   AGE
+nginx-8b55d946b-jbzql   1/1     Running   0          5s
+nginx-8b55d946b-l95jj   1/1     Running   0          53m
+#过了一段时间，没请求发现它缩回去了
+kubectl get pods -n default
+NAME                    READY   STATUS    RESTARTS   AGE
+nginx-8b55d946b-l95jj   1/1     Running   0          58m
 ```
 
 #### 5.2.4 DaemonSet
