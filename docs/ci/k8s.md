@@ -3790,4 +3790,290 @@ Ingress（以Nginx为例）的工作原理如下：
 
 ![avatar](https://picture.zhanghong110.top/docsify/20200516112704764.png)
 
-待续
+
+
+下面我们来演示下，首先搭建`ingress-nginx`
+
+```shell
+#环境搭建
+#在home下建立/home/pod/ingress-controller 
+
+#这里可以去看下匹配版本，新版的也有不同,具体可以看下这个
+https://kubernetes.github.io/ingress-nginx/deploy/#bare-metal
+
+#我们这边去它项目如下路径拉取对应版本的配置文件我们这边如下所示，安装Bare metal clusters版本
+wget https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.1.1/deploy/static/provider/baremetal/deploy.yaml
+```
+
+```shell
+#去到文件路径下跑起来
+kubectl apply -f ./
+#查看下
+[root@master ingress-controller]# kubectl get pod -n ingress-nginx
+NAME                                       READY   STATUS      RESTARTS   AGE
+ingress-nginx-admission-create-nwmg2       0/1     Completed   0          22s
+ingress-nginx-admission-patch-bmrhh        0/1     Completed   1          22s
+ingress-nginx-controller-f9d6fc8d8-2cjcb   1/1     Running     0          22s
+[root@master ingress-controller]# kubectl get svc -n ingress-nginx
+NAME                                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx-controller             NodePort    10.104.5.39     <none>        80:32117/TCP,443:32128/TCP   30s
+ingress-nginx-controller-admission   ClusterIP   10.106.178.42   <none>        443/TCP                      30s
+```
+
+接下来搭建如下图所示服务
+
+![avatar](https://picture.zhanghong110.top/docsify/20200516102419998.png)
+
+`tomcat-nginx.yaml`
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx-pod
+  template:
+    metadata:
+      labels:
+        app: nginx-pod
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.17.1
+        ports:
+        - containerPort: 80
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tomcat-deployment
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: tomcat-pod
+  template:
+    metadata:
+      labels:
+        app: tomcat-pod
+    spec:
+      containers:
+      - name: tomcat
+        image: tomcat:8.5-jre10-slim
+        ports:
+        - containerPort: 8080
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: default
+spec:
+  selector:
+    app: nginx-pod
+  clusterIP: None
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: tomcat-service
+  namespace: default
+spec:
+  selector:
+    app: tomcat-pod
+  clusterIP: None
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+```
+
+```shell
+[root@master pod]# kubectl create -f tomcat-nginx.yaml
+deployment.apps/nginx-deployment created
+deployment.apps/tomcat-deployment created
+service/nginx-service created
+service/tomcat-service created
+[root@master pod]# kubectl get svc -n default
+NAME                   TYPE           CLUSTER-IP       EXTERNAL-IP     PORT(S)        AGE
+kubernetes             ClusterIP      10.96.0.1        <none>          443/TCP        3d2h
+nginx-service          ClusterIP      None             <none>          80/TCP         12s
+tomcat-service         ClusterIP      None             <none>          8080/TCP       12s
+```
+
+**http代理**
+
+主要目的是将某域名转发到指定的`service`上去
+
+创建`ingress-http.yaml`
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-http
+  namespace: default
+spec:
+  ingressClassName: nginx 
+  rules:
+  - host: nginx.itheima.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-service
+            port:
+              number: 80
+  - host: tomcat.itheima.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: tomcat-service
+            port:
+              number: 8080
+```
+
+```shell
+[root@master pod]# kubectl create -f ingress-http.yaml
+ingress.networking.k8s.io/ingress-http created
+#查看下
+[root@master pod]# kubectl get ing ingress-http -n default
+NAME           CLASS   HOSTS                                  ADDRESS           PORTS   AGE
+ingress-http   nginx   nginx.itheima.com,tomcat.itheima.com   192.168.191.132   80      96s
+#详情
+[root@master pod]# kubectl describe ing ingress-http  -n default
+Name:             ingress-http
+Labels:           <none>
+Namespace:        default
+Address:          192.168.191.132
+Default backend:  default-http-backend:80 (<error: endpoints "default-http-backend" not found>)
+Rules:
+  Host                Path  Backends
+  ----                ----  --------
+  nginx.itheima.com   
+                      /   nginx-service:80 (10.244.1.14:80,10.244.1.15:80,10.244.1.30:80 + 3 more...)
+  tomcat.itheima.com  
+                      /   tomcat-service:8080 (10.244.1.29:8080,10.244.1.31:8080,10.244.2.23:8080)
+Annotations:          <none>
+Events:
+  Type    Reason  Age                 From                      Message
+  ----    ------  ----                ----                      -------
+  Normal  Sync    82s (x2 over 2m3s)  nginx-ingress-controller  Scheduled for sync
+
+# 接下来,在本地电脑上配置host文件(C:\Windows\System32\drivers\etc\hosts),解析上面的两个域名到192.168.109.100(master)上
+#192.168.191.130 nginx.itheima.com
+#192.168.191.130 tomcat.itheima.com
+# 然后,就可以分别访问tomcat.itheima.com:32117  和  nginx.itheima.com:32117 查看效果了,亲测可以，就不贴图了
+```
+
+**https代理**
+
+相比上面那个多一步生成证书
+
+```shell
+# 生成证书
+openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.crt -subj "/C=CN/ST=BJ/L=BJ/O=nginx/CN=itheima.com"
+
+# 创建密钥
+kubectl create secret tls tls-secret --key tls.key --cert tls.crt
+```
+
+创建`ingress-https.yaml`,这个密钥在哪个路径下生成的就会在哪里，这里和配置文件同级
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-https
+  namespace: default
+spec:
+  tls:
+  - hosts:
+      - nginx.itheima.com
+      - tomcat.itheima.com
+    secretName: tls-secret # 指定秘钥
+  ingressClassName: nginx 
+  rules:
+  - host: nginx.itheima.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-service
+            port:
+              number: 80
+  - host: tomcat.itheima.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: tomcat-service
+            port:
+              number: 8080
+```
+
+```shell
+#不删了会冲突
+kubectl delete -f ingress-http.yaml
+#运行
+kubectl create -f ingress-https.yaml
+#查看
+root@master pod]# kubectl get ing ingress-https -n default
+NAME            CLASS   HOSTS                                  ADDRESS           PORTS     AGE
+ingress-https   nginx   nginx.itheima.com,tomcat.itheima.com   192.168.191.132   80, 443   2m51s
+#描述
+[root@master pod]# kubectl describe ing ingress-https -n default
+Name:             ingress-https
+Labels:           <none>
+Namespace:        default
+Address:          192.168.191.132
+Default backend:  default-http-backend:80 (<error: endpoints "default-http-backend" not found>)
+TLS:
+  tls-secret terminates nginx.itheima.com,tomcat.itheima.com
+Rules:
+  Host                Path  Backends
+  ----                ----  --------
+  nginx.itheima.com   
+                      /   nginx-service:80 (10.244.1.14:80,10.244.1.15:80,10.244.1.30:80 + 3 more...)
+  tomcat.itheima.com  
+                      /   tomcat-service:8080 (10.244.1.29:8080,10.244.1.31:8080,10.244.2.23:8080)
+Annotations:          <none>
+Events:
+  Type    Reason  Age                   From                      Message
+  ----    ------  ----                  ----                      -------
+  Normal  Sync    2m3s (x2 over 2m57s)  nginx-ingress-controller  Scheduled for sync
+#看下ingress服务443定义在哪个端口
+[root@master pod]# kubectl get svc -n ingress-nginx
+NAME                                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx-controller             NodePort    10.104.5.39     <none>        80:32117/TCP,443:32128/TCP   58m
+ingress-nginx-controller-admission   ClusterIP   10.106.178.42   <none>        443/TCP                      58m
+
+#利用上面一个示例改过的HOST访问，换成HTTPS我们可以看到非常成功
+```
+
+> 做个总结的话就是依赖于ingress（nginx实现），将域名匹配到service从而分发到Pod上。
