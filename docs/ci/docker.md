@@ -133,7 +133,7 @@ docker run ...  -v 宿主机目录（文件）:容器内目录（文件）   注
 
 5.一些基本命令
 
-```
+```shell
 # 查看日志 
 docker logs 容器名(不是ID) --tail 1000
 
@@ -148,6 +148,9 @@ docker start container1
 
 # 启动多个容器
 docker start container1 container2
+
+#一次性重启所有容器(效果不好，有的容器有启动顺序要求)
+docker start $(docker ps -a | awk '{ print $1}' | tail -n +2)
 
 
 # 重启

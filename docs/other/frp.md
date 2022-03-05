@@ -36,7 +36,6 @@
 ```
 [common]
 bind_port = 7000
-vhost_http_port = 80
 vhost_https_port = 443
 ```
 
@@ -58,7 +57,7 @@ nohup /u01/frp/frp_0.37.1_linux_386/frps -c /u01/frp/frp_0.37.1_linux_386/frps.i
 
 ```
 [common]
-server_addr = 1.116.91.244
+server_addr = xxx.xxx.xxx.xxx
 server_port = 7000
 
 [ssh]
@@ -170,3 +169,23 @@ fi
 > 这里要做个提示，类似[common]这种头，每个穿透的配置项不能重复
 
 !>最后,有一点希望大家注意,我在使用时,6000端口被人家用脚本暴力尝试导致半个月内错误日志达到了4G，导致我自己的SSH链接特别卡顿，建议不要使用默认的端口。
+
+### 三.多台机器的搭建
+
+> 此时我们更进一步了拥有了三台机器，这时候需要一对多来穿透，怎么做呢
+
+这个时候猜测上去，服务端不动，客户端增加端口即可，我们尝试下,复制一份到另一台客户机器
+
+```
+[common]
+server_addr = xxx.xxx.xxx.xxx
+server_port = 7000
+
+[ssh2]
+type = tcp
+local_ip = 127.0.0.1
+local_port = 22
+remote_port = 6002
+```
+
+测试链接没问题，注意需要开启跳板机对应端口以及ssh名称需要不重复比如第一台机器是ssh第二台就叫ssh2
