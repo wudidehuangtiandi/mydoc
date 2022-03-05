@@ -47,7 +47,7 @@ vhost_https_port = 443
 nohup /u01/frp/frp_0.37.1_linux_386/frps -c /u01/frp/frp_0.37.1_linux_386/frps.ini >output 2>&1 &
 ```
 
-> 由于对应的跳板机可能会有重启的需求，可以将该命令加到 `/etc/rc.d/rc.local`的最后一行，用以实现开机自启动
+> 由于对应的跳板机可能会有重启的需求，可以将该命令加到 `/etc/rc.d/rc.local`的最后一行，用以实现开机自启动,注意这个文件要chomd +x rc.local赋予可执行权限
 
 
 
