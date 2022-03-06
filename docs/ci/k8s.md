@@ -4080,7 +4080,7 @@ ingress-nginx-controller-admission   ClusterIP   10.106.178.42   <none>        4
 
 ### 5.4 数据存储
 
-在前面已经提到，容器的生命周期可能很短，会被频繁地创建和销毁。那么容器在销毁时，保存在容器中的数据也会被清除。这种结果对用户来说，在某些情况下是不乐意看到的。为了持久化保存容器的数据，kubernetes引入了Volume的概念。
+在前面已经提到，容器的生命周期可能很短，会被频繁地创建和销毁。那么容器在销毁时，保存在容器中的数据也会被清除。这种结果对用户来说，在某些情况下是不乐意看到的。为了持久化保存容器的数据，kubernetes引入了Volume(存储卷)的概念。
 
 Volume是Pod中能够被多个容器访问的共享目录，它被定义在Pod上，然后被一个Pod里的多个容器挂载到具体的文件目录下，kubernetes通过Volume实现同一个Pod中不同容器之间的数据共享以及数据的持久化存储。Volume的生命容器不与Pod中单个容器的生命周期相关，当容器终止或者重启时，Volume中的数据也不会丢失。
 
@@ -4089,3 +4089,205 @@ kubernetes的Volume支持多种类型，比较常见的有下面几个：
 - 简单存储：EmptyDir、HostPath、NFS
 - 高级存储：PV、PVC
 - 配置存储：ConfigMap、Secret
+
+#### 5.4.1 基本存储
+
+**EmptyDir**
+
+EmptyDir是最基础的Volume类型，一个EmptyDir就是Host上的一个空目录。
+
+EmptyDir是在Pod被分配到Node时创建的，它的初始内容为空，并且无须指定宿主机上对应的目录文件，因为kubernetes会自动分配一个目录，当Pod销毁时， EmptyDir中的数据也会被永久删除。 EmptyDir用途如下：
+
+- 临时空间，例如用于某些应用程序运行时所需的临时目录，且无须永久保留
+- 一个容器需要从另一个容器中获取数据的目录（多容器共享目录）
+
+下面我们演示下
+
+在`一个Pod中`准备两个容器`nginx`和`busybox`，然后声明一个Volume分别挂在到两个容器的目录中，然后nginx容器负责向Volume中写日志，busybox中通过命令将日志内容读到控制台。
+
+创建一个`volume-emptydir.yaml`
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: volume-emptydir
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    ports:
+    - containerPort: 80
+    volumeMounts:  # 将logs-volume挂在到nginx容器中，对应的目录为 /var/log/nginx
+    - name: logs-volume
+      mountPath: /var/log/nginx
+  - name: busybox
+    image: busybox:1.30
+    command: ["/bin/sh","-c","tail -f /logs/access.log"] # 初始命令，动态读取指定文件中内容
+    volumeMounts:  # 将logs-volume 挂在到busybox容器中，对应的目录为 /logs
+    - name: logs-volume
+      mountPath: /logs
+  volumes: # 声明volume， name为logs-volume，类型为emptyDir
+  - name: logs-volume
+    emptyDir: {}
+```
+
+```shell
+kubectl create -f volume-emptydir.yaml
+
+#查看
+[root@master pod]# kubectl get pods volume-emptydir -n default -o wide
+NAME              READY   STATUS    RESTARTS   AGE   IP            NODE    NOMINATED NODE   READINESS GATES
+volume-emptydir   2/2     Running   0          5s    10.244.1.38   node2   <none>           <none>
+
+# 通过podIp访问nginx(curl就会使用busybox，这样它的日志就会打印到控制台)
+curl 10.244.1.38
+
+# 通过kubectl logs命令查看指定容器的标准输出
+[root@master pod]# kubectl logs -f volume-emptydir -n default -c busybox
+10.244.0.0 - - [06/Mar/2022:02:06:09 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.29.0" "-"
+
+#这个例子想表达的感觉不是很明确，总体意思就是nginx和busybox的日志都打印到了这个emptyDir中，我们只是去看了下busybox的成功日志而已。
+```
+
+**HostPath**
+
+EmptyDir中数据不会被持久化，它会随着Pod的结束而销毁，如果想简单的将数据持久化到主机中，可以选择HostPath。
+
+HostPath就是将Node主机中一个实际目录挂在到Pod中，以供容器使用，这样的设计就可以保证Pod销毁了，但是数据依据可以存在于Node主机上。
+
+我们演示下
+
+创建一个`volume-hostpath.yaml`
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: volume-hostpath
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: logs-volume
+      mountPath: /var/log/nginx
+  - name: busybox
+    image: busybox:1.30
+    command: ["/bin/sh","-c","tail -f /logs/access.log"]
+    volumeMounts:
+    - name: logs-volume
+      mountPath: /logs
+  volumes:
+  - name: logs-volume
+    hostPath: 
+      path: /root/logs
+      type: DirectoryOrCreate  # 目录存在就使用，不存在就先创建后使用
+```
+
+```markdown
+关于type的值的一点说明：
+    DirectoryOrCreate 目录存在就使用，不存在就先创建后使用
+    Directory   目录必须存在
+    FileOrCreate  文件存在就使用，不存在就先创建后使用
+    File 文件必须存在 
+    Socket  unix套接字必须存在
+    CharDevice  字符设备必须存在
+    BlockDevice 块设备必须存在
+```
+
+```shell
+kubectl create -f volume-hostpath.yaml
+#查看
+[root@master pod]# kubectl get pods volume-hostpath -n default -o wide
+NAME              READY   STATUS    RESTARTS   AGE   IP            NODE    NOMINATED NODE   READINESS GATES
+volume-hostpath   2/2     Running   0          21s   10.244.2.28   node1   <none>           <none>
+#访问
+curl 10.244.2.28
+
+[root@master pod]# kubectl logs -f volume-hostpath -n default -c busybox
+10.244.0.0 - - [06/Mar/2022:02:32:19 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.29.0" "-"
+
+# 接下来就可以去host的/root/logs目录下查看存储的文件了
+###  注意: 下面的操作需要到Pod所在的节点运行（我们是node1）
+[root@node1 ~]# ls /root/logs/
+access.log  error.log
+
+# 同样的道理，如果在此目录下创建一个文件，到容器中也是可以看到的
+```
+
+**NFS**
+
+HostPath可以解决数据持久化的问题，但是一旦Node节点故障了，Pod如果转移到了别的节点，又会出现问题了，此时需要准备单独的网络存储系统，比较常用的用NFS、CIFS。
+
+NFS是一个网络文件存储系统，可以搭建一台NFS服务器，然后将Pod中的存储直接连接到NFS系统上，这样的话，无论Pod在节点上怎么转移，只要Node跟NFS的对接没问题，数据就可以成功访问。
+
+首先要准备nfs的服务器，这里为了简单，直接是master节点做nfs服务器，我们在home下创建nfs
+
+```shell
+# 在nfs上安装nfs服务
+yum install nfs-utils -y
+
+# 准备一个共享目录
+mkdir /home/nfs/data -pv
+
+# 将共享目录以读写权限暴露给192.168.191.0/24网段中的所有主机,修改/etc/exports
+# 查看下
+[root@master nfs]# more /etc/exports
+/home/nfs/data  192.168.191.0/24(rw,no_root_squash)
+
+# 启动nfs服务
+systemctl restart nfs
+```
+
+```shell
+接下来，要在的每个node节点上都安装下nfs，这样的目的是为了node节点可以驱动nfs设备
+# 在node上安装nfs服务，注意不需要启动
+# yum install nfs-utils -y
+```
+
+接下来，就可以编写pod的配置文件了，创建`volume-nfs.yaml`
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: volume-nfs
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: logs-volume
+      mountPath: /var/log/nginx
+  - name: busybox
+    image: busybox:1.30
+    command: ["/bin/sh","-c","tail -f /logs/access.log"] 
+    volumeMounts:
+    - name: logs-volume
+      mountPath: /logs
+  volumes:
+  - name: logs-volume
+    nfs:
+      server: 192.168.191.130  #nfs服务器地址
+      path: /home/nfs/data #共享文件路径
+```
+
+```shell
+kubectl create -f volume-nfs.yaml
+
+[root@master pod]# kubectl get pods volume-nfs -n default
+NAME         READY   STATUS    RESTARTS   AGE
+volume-nfs   2/2     Running   0          17s
+#查看下这个目录发现已经有文件了
+[root@master pod]# ls /home/nfs/data
+access.log  error.log
+```
+
