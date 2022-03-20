@@ -4658,6 +4658,267 @@ PVC和PV是一一对应的，PV和PVC之间的相互作用遵循以下生命周�
 
   ![avatar](https://picture.zhanghong110.top/docsify/1647611166.png)
 
-  
 
-  
+#### 5.4.3 配置存储
+
+**ConfigMap**
+
+ConfigMap是一种比较特殊的存储卷，它的主要作用是用来存储配置信息的。
+
+创建`configmap.yaml`，内容如下：
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap
+  namespace: default
+data:
+  info: |
+    username:admin
+    password:123456
+```
+
+```shell
+[root@master pod]# kubectl create -f configmap.yaml
+configmap/configmap created
+
+#查看下
+[root@master pod]# kubectl describe cm configmap -n default
+Name:         configmap
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+info:
+----
+username:admin
+password:123456
+
+
+BinaryData
+====
+
+Events:  <none>
+```
+
+接下来创建一个`pod-configmap.yaml`，将上面创建的`configmap`挂载进去
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-configmap
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    volumeMounts: # 将configmap挂载到目录
+    - name: config
+      mountPath: /configmap/config
+  volumes: # 引用configmap
+  - name: config
+    configMap:
+      name: configmap
+```
+
+```shell
+kubectl create -f pod-configmap.yaml
+
+[root@master pod]# kubectl get pod pod-configmap -n default
+NAME            READY   STATUS    RESTARTS   AGE
+pod-configmap   1/1     Running   0          13s
+
+#进入容器
+[root@master pod]# kubectl exec -it pod-configmap -n default /bin/sh
+kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.
+# cd /configmap/config/
+# ls
+info
+# more info
+username:admin
+password:123456
+
+# 可以看到映射已经成功，每个configmap都映射成了一个目录
+# key--->文件     value---->文件中的内容
+# 此时如果更新configmap的内容, 容器中的值也会动态更新
+```
+
+ **Secret**
+
+在kubernetes中，还存在一种和ConfigMap非常类似的对象，称为Secret对象。它主要用于存储敏感信息，例如密码、秘钥、证书等等。
+
+首先使用base64对数据进行编码
+
+```shell
+echo -n 'admin' | base64 #准备username
+YWRtaW4=
+echo -n '123456' | base64 #准备password
+MTIzNDU2
+```
+
+接下来编写`secret.yaml`，并创建Secret
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secret
+  namespace: default
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: MTIzNDU2
+```
+
+```shell
+[root@master pod]# kubectl create -f secret.yaml
+secret/secret created
+
+#查看secret
+[root@master pod]# kubectl describe secret secret -n default
+Name:         secret
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Type:  Opaque
+
+Data
+====
+password:  6 bytes
+username:  5 bytes
+```
+
+ 创建`pod-secret.yaml`，将上面创建的secret挂载进去：
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-secret
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.17.1
+    volumeMounts: # 将secret挂载到目录
+    - name: config
+      mountPath: /secret/config
+  volumes:
+  - name: config
+    secret:
+      secretName: secret
+```
+
+```shell
+kubectl create -f pod-secret.yaml
+
+[root@master pod]# kubectl get pod pod-secret -n default
+NAME         READY   STATUS    RESTARTS   AGE
+pod-secret   1/1     Running   0          12s
+
+#进入容器可以看到已经解码了
+[root@master pod]# kubectl exec -it pod-secret /bin/sh -n default
+kubectl exec [POD] [COMMAND] is DEPRECATED and will be removed in a future version. Use kubectl exec [POD] -- [COMMAND] instead.
+# ls /secret/config/
+password  username
+# more /secret/config/username
+admin
+# more /secret/config/password
+123456
+```
+
+> 至此，已经实现了利用secret实现了信息的编码。
+
+### 5.5 安全认证
+
+!>这一章节没有手动实现，属于了解章节，有兴趣的可以去以下提供的链接看下，不过它这个版本偏老需要注意下
+
+[原文档地址](https://picture.zhanghong110.top/docsify/k8s详细教程.zip)
+
+### 5.6 DASHBOARD
+
+之前在kubernetes中完成的所有操作都是通过命令行工具kubectl完成的。其实，为了提供更丰富的用户体验，kubernetes还开发了一个基于web的用户界面（Dashboard）。用户可以使用Dashboard部署容器化的应用，还可以监控应用的状态，执行故障排查以及管理kubernetes中各种资源。
+
+
+
+```shell
+# 下载yaml
+# wget  https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0/aio/deploy/recommended.yaml
+
+# 修改kubernetes-dashboard的Service类型，注意别改错地方
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+spec:
+  type: NodePort  # 新增
+  ports:
+    - port: 443
+      targetPort: 8443
+      nodePort: 30009  # 新增
+  selector:
+    k8s-app: kubernetes-dashboard
+
+#启动POD
+kubectl create -f recommended.yaml
+
+#看下状态
+[root@master pod]# kubectl get pod,svc -n kubernetes-dashboard
+NAME                                            READY   STATUS    RESTARTS   AGE
+pod/dashboard-metrics-scraper-79459f84f-7cg7d   1/1     Running   0          89s
+pod/kubernetes-dashboard-76dc96b85f-kztzl       1/1     Running   0          89s
+
+NAME                                TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)         AGE
+service/dashboard-metrics-scraper   ClusterIP   10.97.239.160   <none>        8000/TCP        89s
+service/kubernetes-dashboard        NodePort    10.108.57.210   <none>        443:30009/TCP   89s
+```
+
+创建访问账户，获取token
+
+```shell
+# 创建账号
+[root@master pod]#  kubectl create serviceaccount dashboard-admin -n kubernetes-dashboard
+serviceaccount/dashboard-admin created
+
+#授权
+[root@master pod]# kubectl create clusterrolebinding dashboard-admin-rb --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:dashboard-admin
+clusterrolebinding.rbac.authorization.k8s.io/dashboard-admin-rb created
+
+# 获取账号token
+[root@master pod]# kubectl get secrets -n kubernetes-dashboard | grep dashboard-admin
+dashboard-admin-token-c2xlf        kubernetes.io/service-account-token   3      52s
+
+#看下TOKEN信息，每个TOKEN不一样不要照抄
+[root@master pod]#  kubectl describe secrets dashboard-admin-token-c2xlf  -n kubernetes-dashboard
+Name:         dashboard-admin-token-c2xlf
+Namespace:    kubernetes-dashboard
+Labels:       <none>
+Annotations:  kubernetes.io/service-account.name: dashboard-admin
+              kubernetes.io/service-account.uid: b64610c1-3582-4702-86f8-fbf51dafb4be
+
+Type:  kubernetes.io/service-account-token
+
+Data
+====
+ca.crt:     1099 bytes
+namespace:  20 bytes
+token:      eyJhbGciOiJSUzI1NiIsImtpZCI6Ik9WQ3RLZnp4ZnFhY1JQZ2JyQTFmdkdSWVpCMnZIdW1Ld3YyQmlodWZLM2sifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlcm5ldGVzLWRhc2hib2FyZCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJkYXNoYm9hcmQtYWRtaW4tdG9rZW4tYzJ4bGYiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoiZGFzaGJvYXJkLWFkbWluIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQudWlkIjoiYjY0NjEwYzEtMzU4Mi00NzAyLTg2ZjgtZmJmNTFkYWZiNGJlIiwic3ViIjoic3lzdGVtOnNlcnZpY2VhY2NvdW50Omt1YmVybmV0ZXMtZGFzaGJvYXJkOmRhc2hib2FyZC1hZG1pbiJ9.HeAC-l-s_Duoa-4pczInZTjUuDZ-yXpFt7dTc8KEMXNzDAKWWg79pxeDg0aBPadtJCbFJ2MwSXuujuqDq_S743AunUVY7UmRgMAPdf7YfasJjDt3DitjvBU1aMWVy4aEZ3lzFSbw-WlhPN7G4PH_HHTKNpnOMMPD5Wb8PkW0ygs3_eIXuNjYNl28i891bgFl7Y7fvnCxRRM8TxNWatLcBvg7qjSPtxh0Jt6F4HHsXDU7LbBX36a3qkrxZB1fBrctrCod3FTRG6q02Vz1a7aCspQ2E_zCjfC8ZMxZsissLPprB9rr486v2T9smQhMJ8DStj6ligdDv7Vh1qRnt6B5Kg
+```
+
+通过浏览器访问Dashboard的UI
+
+在登录页面上输入上面的token
+
+![avatar](https://picture.zhanghong110.top/docsify/1647745927.jpg)
+
+![avatar](https://picture.zhanghong110.top/docsify/1647746122.jpg)
+
+> 至此我们可以通过控制面板操作我们原来绝大多数用命令行完成的事情了
