@@ -4922,3 +4922,5 @@ token:      eyJhbGciOiJSUzI1NiIsImtpZCI6Ik9WQ3RLZnp4ZnFhY1JQZ2JyQTFmdkdSWVpCMnZI
 ![avatar](https://picture.zhanghong110.top/docsify/1647746122.jpg)
 
 > 至此我们可以通过控制面板操作我们原来绝大多数用命令行完成的事情了
+
+[本次文档所有的POD实列](https://picture.zhanghong110.top/docsify/pod.zip)
