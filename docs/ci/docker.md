@@ -69,7 +69,7 @@ sudo systemctl stop docker
 复制到指定路径
 cp -R /var/lib/docker/* /home/docker/lib/docker
 修改配置文件
-etc/systemd/system/docker.service.d/docker-options.conf
+etc /systemd/system/docker.service.d/docker-options.conf
 增加以下内容
 ExecStart=/usr/bin/dockerd  --graph=/home/docker/lib/docker
 启动docker服务
@@ -199,7 +199,7 @@ docker run --name nginx --privileged -it -p 80:80 -v /data/nginx/conf/nginx.conf
 -v /data/nginx/conf.d:/etc/nginx/conf.d:ro  \
 -v /data/nginx/html:/usr/share/nginx/html:rw \
 -v /etc/localtime:/etc/localtime \
--v/data/nginx/logs:/var/log/nginx -d nginx
+-v /data/nginx/logs:/var/log/nginx -d nginx
 
 最后把我们的放到html文件夹解压,重启nginx即可
 
