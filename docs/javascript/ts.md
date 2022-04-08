@@ -84,7 +84,7 @@ tsc xxx.ts -w
 
 我们依托该结构，采用TS与编译后的js对比来介绍下ts语法
 
-##### 3.2.1 类型声明
+#### 3.2.1 类型声明
 
 基本类型
 
@@ -250,7 +250,7 @@ var k;
 k = 1;
 ```
 
-##### 3.2.2 tsconfig.json配置文件
+#### 3.2.2 tsconfig.json配置文件
 
 我们使用`tsc`命令编译的时候，编译器会从当前目录开始去查找`tsconfig.json`文件，逐级向上搜索父目录。这个文件中指定了用来编译这个项目的根文件和编译选项。
 
@@ -331,7 +331,7 @@ export const hi ='nihao'
 
 ![avatar](https://picture.zhanghong110.top/docsify/16451694042075.png)
 
-##### 3.2.3 webpack构建
+#### 3.2.3 webpack构建
 
 >接下来我们来看下如何将`ts`和`webpack`结合使用
 
@@ -518,11 +518,11 @@ console.log('123')
 
 > 到这边我们`webpack`就和`ts`集成成功了
 
-##### 3.2.4 基本语法
+#### 3.2.4 基本语法
 
 > 学完了集成方式，我们来学习一下`ts`的基本语法
 
-###### 3.2.4.1 类的简介
+##### 3.2.4.1 类的简介
 
 TS:
 
@@ -603,7 +603,7 @@ per.sayHello();
 
 ![avatar](https://picture.zhanghong110.top/docsify/16451727043900.png)
 
-###### 3.2.4.2 构造函数和this
+##### 3.2.4.2 构造函数和this
 
 TS:
 
@@ -683,7 +683,7 @@ cat.break();
 
 ![avatar](https://picture.zhanghong110.top/docsify/16451730597139.png)
 
-###### 3.2.4.3 继承及抽象类
+##### 3.2.4.3 继承及抽象类
 
 TS:
 
@@ -756,7 +756,7 @@ JS:
 
 ![avatar](https://picture.zhanghong110.top/docsify/16451733324180.png)
 
-###### 3.2.4.4 接口
+##### 3.2.4.4 接口
 
 TS:
 
@@ -838,7 +838,7 @@ JS:
 
 这个没啥输出我们就不看了，可以看到接口还是和java十分类似23333333
 
-###### 3.2.4.5 属性的封装
+##### 3.2.4.5 属性的封装
 
 TS:
 
@@ -957,7 +957,7 @@ JS:
 
 ![avatar](https://picture.zhanghong110.top/docsify/16451753385221.png)
 
-###### 3.2.4.6 泛型
+##### 3.2.4.6 泛型
 
 TS:
 
