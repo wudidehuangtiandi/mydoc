@@ -282,7 +282,10 @@ docker run -p 6379:6379 --name redis -v /home/redis/data:/data \
 5.nacos
 
 ```
-需要新建配置文件,注意2.0以上版本需要暴露8848+1000的端口号用以客户端请求，集群还需要8848+1001用以服务间同步
+docker pull nacos/nacos-server
+
+需要新建配置文件,注意2.0以上版本需要暴露8848+1000的端口号用以客户端请求，集群还需要8848+1001用以服务间同步,
+需要有配置文件,可以去解压了抄一个
 
 docker  run \
 --name nacos -d \
