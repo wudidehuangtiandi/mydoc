@@ -14,7 +14,7 @@
 
 > 仅针对centos7，也可以去官网看教程，要选择对应的centos的脚本
 
-
+> 首先大部分机器需要源切换，前提yum安装了yum -y install yum-utils，然后yum-config-manager --add-repo http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
 
 1.首先卸载旧版本的docker,使用以下命令
 
