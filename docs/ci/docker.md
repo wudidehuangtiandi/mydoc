@@ -18,7 +18,7 @@
 
 1.首先卸载旧版本的docker,使用以下命令
 
-```
+```shell
 sudo yum remove docker \
                   docker-client \
                   docker-client-latest \
@@ -33,19 +33,19 @@ sudo yum remove docker \
 
 2.安装*最新版本*的 `Docker Engine` 和` containerd`
 
-```
+```shell
 sudo yum install docker-ce docker-ce-cli containerd.io
 ```
 
 3.启动docker
 
-```
+```shell
 sudo systemctl start docker
 ```
 
 4.验证是否成功
 
-```
+```shell
 sudo docker run hello-world
 ```
 
@@ -63,7 +63,7 @@ sudo docker run hello-world
 
 6.迁移对应的容器目录，有时候默认的路径容量可能较小，此时应当迁移到指定的目录，以centos7为例
 
-```
+```shell
 停止docker服务
 sudo systemctl stop docker 
 复制到指定路径
@@ -78,7 +78,7 @@ sudo systemctl start docker
 
 7.当需要配置开机启动时,采用以下命令即可
 
-```
+```shell
 systemctl enable docker
 ```
 
@@ -134,6 +134,21 @@ docker run ...  -v 宿主机目录（文件）:容器内目录（文件）   注
 5.一些基本命令
 
 ```shell
+#搜索镜像
+docker search xxx
+
+#拉取镜像
+docker pull xxx
+
+#查看镜像
+docker images 或者 docker image ls
+
+#打标签 tag后面分别是镜像ID 推送的网站 账号 版本号
+docker tag [imageid] docker.io/[dockerhub账号]/xxx:v1.0.0
+
+#推送
+docker push docker.io/[dockerhub账号]/xxx:v1.0.0
+
 # 查看日志 
 docker logs 容器名(不是ID) --tail 1000
 
@@ -173,17 +188,17 @@ docker logs container1
 
 1.nginx
 
-```
-首先下载nginx镜像
+```shell
+#首先下载nginx镜像
 docker pull nginx
 
-创建挂载的目录，我是放在/data/nginx里面，可自行更改
+#创建挂载的目录，我是放在/data/nginx里面，可自行更改
 mkdir -p /data/nginx/conf #存放配置文件
 mkdir -p /data/nginx/logs
 mkdir -p /data/nginx/html
 mkdir -p /data/nginx/conf.d
 
-因为不能挂载文件，只能挂载一个文件夹，所以我们要先创建一个测试test容器的nginx，然后复制配置文件到挂载的目录上
+#因为不能挂载文件，只能挂载一个文件夹，所以我们要先创建一个测试test容器的nginx，然后复制配置文件到挂载的目录上
 ##启动测试容器
 docker run --name test -d nginx
 
@@ -194,14 +209,14 @@ docker cp test:/etc/nginx/conf.d/default.conf  /data/docker/nginx/conf.d
 ##如果不知道配置文件在docker里面的目录位置,可以进去看一下
 docker exec -it test /bin/bash
 
-然后运行你自己的nginx
+#然后运行你自己的nginx
 docker run --name nginx --privileged -it -p 80:80 -v /data/nginx/conf/nginx.conf:/etc/nginx/nginx.conf:ro  \
 -v /data/nginx/conf.d:/etc/nginx/conf.d:ro  \
 -v /data/nginx/html:/usr/share/nginx/html:rw \
 -v /etc/localtime:/etc/localtime \
 -v /data/nginx/logs:/var/log/nginx -d nginx
 
-最后把我们的放到html文件夹解压,重启nginx即可
+#最后把我们的放到html文件夹解压,重启nginx即可
 
 ##在html文件夹解压我们上传的dist文件
 unzip dist.zip
@@ -209,9 +224,9 @@ unzip dist.zip
 ##重启Jenkins
 docker restart b0ba
 
-注意，这时候配置文件虽然映射出来了但是路径依然是需要配置容器路径才能正常映射。
+#注意，这时候配置文件虽然映射出来了但是路径依然是需要配置容器路径才能正常映射。
 
-下面是TD的真实配置脚本
+#下面是TD的真实配置脚本
 docker run --name nginx --privileged -it -v /home/nginx/conf/nginx.conf:/etc/nginx/nginx.conf:ro  \
 -v /home/nginx/conf.d:/etc/nginx/conf.d:ro  \
 -v /home/nginx/html:/usr/share/nginx/html:rw \
@@ -229,12 +244,12 @@ docker run --name nginx --privileged -it -v /home/nginx/conf/nginx.conf:/etc/ngi
 
 2.minio
 
-```
+```shell
 docker pull minio/minio
 
-启动脚本：
+#启动脚本：
 
-在home目录下新建data及config文件,新版的需要暴露两个端口一个是控制台一个是API
+#在home目录下新建data及config文件,新版的需要暴露两个端口一个是控制台一个是API
 
 docker run -p 9000:9000 -p 9001:9001 --name minio \
   -v /etc/localtime:/etc/localtime \
@@ -251,7 +266,7 @@ docker run -p 9000:9000 -p 9001:9001 --name minio \
 
 3.mysql
 
-```
+```shell
 mysql 注意配置文件默认为空，有需要的话去官网搞一个 
 
 docker run -p 3306:3306 --name mysql \
@@ -268,7 +283,7 @@ docker run -p 3306:3306 --name mysql \
 
 4.redis
 
-```
+```shell
 redis 注意配置文件默认为空，需要去官网搞一个 。注意，用配置文件需要修改三处保护模式(protected-mode)修改为no。
 把密码这行的注释解掉，修改为自己的密码 requirepass xxx 。 把bind 127.0.0.1注释掉。
 
@@ -281,7 +296,7 @@ docker run -p 6379:6379 --name redis -v /home/redis/data:/data \
 
 5.nacos
 
-```
+```shell
 docker pull nacos/nacos-server
 
 需要新建配置文件,注意2.0以上版本需要暴露8848+1000的端口号用以客户端请求，集群还需要8848+1001用以服务间同步,
@@ -307,7 +322,7 @@ nacos/nacos-server
 
 6.下面展示几个服务的配置方式，具体为公司业财融合系统的脚本，可以作为参考
 
-```
+```shell
 docker run -d \
        --name ry-geteway \
        -v /u01/ycrh/ry-gateway:/u01/ycrh/ry-gateway \
@@ -418,7 +433,7 @@ docker run -d \
 
 下面演示下TD里部分脚本
 
-```
+```shell
 采用HOST模式，不采用桥接模式，否则127.0.0.1不生效。
 docker run -d \
        --name ry-gateway \
@@ -446,7 +461,7 @@ docker run -d \
 
 7.rabbitmq
 
-```
+```shell
 docker pull rabbitmq
 docker pull rabbitmq:management 
 需要注意的是，docker pull rabbitmq (镜像未配有控制台)，docker pull rabbitmq:management (镜像配有控制台)。
@@ -472,7 +487,7 @@ docker exec -it rabbitmq rabbitmq-plugins enable rabbitmq_management
 
 1.如何打包自己的镜像，以下为我的第一个dockerfile脚本
 
-```
+```dockerfile
 FROM adoptopenjdk/openjdk11:alpine AS builder
 MAINTAINER GC
 ADD msa-registy-0.0.1-SNAPSHOT.jar  /usr/var/docker_test/eureka.jar
@@ -481,9 +496,104 @@ ENTRYPOINT ["nohup","java","-jar","/usr/var/docker_test/eureka.jar","&"]
 
 
 
+> 2022/04/25更新
+
+由于需要结合K8S部署项目，所以这边学习下如何这块内容
+
+**dockerfile**
 
 
 
+> 简单的dockerfile编写
+
+```dockerfile
+#简单的Dockerfile编写
+
+#用于指定镜像
+FROM alpine:latest
+#在这个镜像下创建某目录（工作目录）
+WORKDIR /app
+#将宿主机文件拷贝到镜像,下面这句的命令是将src文件夹拷贝到/app目录下
+COPY src/ /app
+#在构建的时候运行的脚本，目录为工作目录下
+RUN echo 321 >> 1.txt
+#容器运行时才会执行的脚本,执行完了容器生命周期结束，所以这边设置为阻塞式。
+CMD tail -f 1.txt
+```
 
 
+
+> 构建镜像
+
+```shell
+#表示在当前目录下构建镜像，名字为test
+docker build -t test .
+```
+
+
+
+> 运行
+
+```shell
+#运行
+docker run test
+```
+
+
+
+> 几个相似指令和一些别的指令
+
+```dockerfile
+#这个指令类似于COPY 区别是ADD 能够添加网络地址，推荐使用COPY。
+ADD 
+
+#和CMD类似，也是可以指定容器运行后的核心脚本
+#和CMD都可以用JSON数组指定比如["cat","1.txt"]
+#可能会存在两者同时使用的情况，会按照一下准则。ENTRYPOINT非JOSN则以ENTRYPOINT为准，CMD无效，
+#如果ENTRYPOINT和CMD都是JSON则ENTRYPOINT+CMD拼接成shell。其它的情况都不太会遇到。
+ENTRYPOINT
+
+#指定暴露出来的端口
+EXPOSE
+
+#指定映射文件，以下命令会把容器的/a/b这个目录映射到宿主机的匿名卷
+#EXPOSE和这个命令类似docker run -p -v 这两命令
+VOLUME /a/b
+
+#指定环境变量，会一直存在
+#比如
+#ENV A=10 
+#CMD echo $A 
+#就能打印10
+ENV
+
+#也是环境变量，只在构建时生效，运行时失效，可以类似这样指定 
+#ARG B=11
+#ENV A $B
+#CMD echo $A
+#就能打印出11，直接打印B则无效，应为CMD是运行时命令而不是构建时命令
+#可以在构建时通过 docker build -t test --build-arg B=12 . 来将变量传入
+ARG
+
+#一般写在第二行，用来指定一些元数据信息 比如 k="v" 
+#可以通过docker inspect来找到镜像信息
+LABEL
+
+#指定的指令在当前的镜像是不会运行的，如果另一个镜像是基于这个镜像的话则会运行
+ONBUILD
+
+#用于指定RUN CMD等指令运行时的用户身份，不指定是root
+#USER  用户名:用户组   或
+#USER  用户id:组id
+USER
+
+#指定信号名使得容器停止，很少使用
+STOPSIGNAL
+
+#检查容器健康状态，很少使用
+HEALTHCHECK
+
+#就是这个SHELL脚本是基于哪个SHELL进行的，LINUX就是默认下面这个
+SHELL /bin/sh
+```
 
