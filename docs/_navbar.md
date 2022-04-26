@@ -13,8 +13,9 @@
 * 中间件
   * [redis](/mw/redis)
 
-* [数据库](/dbs/empty)
+* 数据库
   * [函数](/dbs/function)
+
 * 服务器
   * [tomcat源码解析](/servers/tomcat)
   * [nginx的配置及优化](/servers/nginx)
