@@ -36,11 +36,11 @@
 
 2、配置的用户名和邮箱对push代码到远程仓库有什么影响？
 
-首先，配置的用户名和邮箱对push代码到远程仓库时的身份验证没有作用，即不用他们进行身份验证；他们仅仅会出现在远程仓库的commits里。
+首先，配置的用户名和邮箱对push代码到远程仓库时的身份验证没有作用，即不用他们进行身份验证；他们仅仅会出现在远程仓库的commits里。（仅仅用于在git历史中显示）
 
 其次，按正常操作来说，你应该配置你的真实用户名和邮箱，这样一来在远程仓库的commits里可以看到哪个操作是你所为
 
-
+全局配置只要使用如下命令即可
 
 
 ```
@@ -48,7 +48,11 @@ git config --global user.name "username"
 git config --global user.email "email"
 ```
 
+这个配置文件有如下优先级，可知上述命令增加的是第二级的配置文件。
 
+系统配置文件，供所有用户的所有仓库使用，位置${git_home}/etc/gitconfig
+用户配置文件，供某一用户的所有仓库使用，位置C:/users/${user_home}/.gitconfig
+仓库配置文件，供某一用户的某一仓库使用，位置${自己的git仓库}/.git/config
 
 ## 2.小乌龟的安装及汉化
 
@@ -64,11 +68,9 @@ IDEA的集成，我们直接选择下`git.exe`的路径即可
 
 ![avatar](https://picture.zhanghong110.top/docsify/16524116171735.png)
 
+VSCODE就更加简单了，默认会给我们增加git版本管理工具，安装GIT后会自动匹配。
 
-
-
-
-VSCODE集成我们
+![avatar](https://picture.zhanghong110.top/docsify/16524313747761.png)
 
 
 
