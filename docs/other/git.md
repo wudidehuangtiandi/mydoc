@@ -78,3 +78,31 @@ VSCODE就更加简单了，默认会给我们增加git版本管理工具，安�
 
 > 我们这里主要解决GIT配置账号密码及SSH配置及多个客户端比如GITHUB,GITLAB,GITLEE同时使用的问题
 
+以上操作完成后我们就可以正常的使用https拉取代码及提交，此时我们提交代码需要每次都输入账号及密码
+
+我们可以用以下设置来
+
+设置记住密码（默认15分钟）：
+`git config –global credential.helper cache`
+如果想自己设置时间，可以这样做：
+`git config credential.helper ‘cache –timeout=3600’`
+这样就设置一个小时之后失效
+长期存储密码：
+`git config –global credential.helper store`
+
+这么设置后你下次提交完代码，就会在一定时间内保存你的账号密码。
+
+!>但是缺点也很明显，假如你不同的项目使用了不同的仓库，则会造成密码错误。而且例如`github`不支持登录时的账号密码，需要用生成的TOKEN作为密码
+
+这边自己的仓库的话还是推荐还是使用SSH来完成代码的下拉及提交，我们只需要设置SSH即可区分不同的仓库
+
+生成`SSHkey`
+
+> ssh-keygen -t rsa -C '邮箱'
+
+一直确定直到结束；根据日志信息里面的 SSH KEY 存储路径找到 .ssh/id_rsa.pub 文件
+
+复制 .ssh/id_rsa.pub 文件内容（公钥）
+打开 git 网站，右上角用户头像，点击 settings，左侧菜单 SSH KEYS，将文件内容复制到 key 里 添加就可以了
+
+这样以后再也不用输入密码了，就可以使用SSH了。不通的网站用不用的邮箱即可，用相同的也可以。
