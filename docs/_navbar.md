@@ -2,15 +2,15 @@
 
 * 后端
   * [线程池的正确创建](/java/threadpool)
-  * [AIO,BIO,NIO](/java/io)
+  * [aio,bio,nio](/java/io)
   * [springmvc源码解析](/java/springmvc)
   * [常见的设计模式](/java/designpattern)
   * [maven常用操作问题解决](/java/maven)
   * [gradle的概念及使用](/java/gradle)
 
 * 前端
-  * [ES6](/javascript/es6)
-  * [TS](/javascript/ts)
+  * [es6](/javascript/es6)
+  * [ts](/javascript/ts)
 
 * 中间件
   * [redis](/mw/redis)
@@ -34,7 +34,7 @@
   * [log4j2 JNDI注入漏洞](/other/log4j2jndi)
   * [关于druid连接池的一些探究](/other/druid)
   * [centos的常用操作](/other/centos)
-  * [GIT的基本使用及配置](/other/git)
+  * [git的基本使用及配置](/other/git)
 * [作者相关](#Introduction)
   
 
