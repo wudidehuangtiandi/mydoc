@@ -106,3 +106,111 @@ VSCODE就更加简单了，默认会给我们增加git版本管理工具，安�
 打开 git 网站，右上角用户头像，点击 settings，左侧菜单 SSH KEYS，将文件内容复制到 key 里 添加就可以了
 
 这样以后再也不用输入密码了，就可以使用SSH了。不通的网站用不用的邮箱即可，用相同的也可以。
+
+## 5.git及一些常用操作
+
+以下操作前提是需要设置账户身份即
+
+```
+git config --global user.name "xx"
+git config --global user.email "邮箱"
+```
+
+创建一个新仓库推送到git仓库，`github`,`gitlab`,`gitlee`都略有不同，但是大致意思一致，我们以`gitlab`为例子
+
+```
+创建新的存储库
+git clone ssh://git@172.23.112.16:8022/gechao/git.git
+cd git
+touch README.md
+git add README.md
+git commit -m "add README"
+git push -u origin master
+
+将本地仓库推送到已存在的地址
+cd existing_folder
+git init
+git remote add origin ssh://git@172.23.112.16:8022/gechao/git.git
+git add .
+git commit -m "Initial commit"
+git push -u origin master
+
+推送到一个已经存在的库
+cd existing_repo
+git remote rename origin old-origin
+git remote add origin ssh://git@172.23.112.16:8022/gechao/git.git
+git push -u origin --all
+git push -u origin --tags
+```
+
+> 下面是一些日常生产过程中可能需要的操作
+
+1.同步线上的分支情况
+
+```
+git remote update origin --prune
+```
+
+这个操作在idea上也可以用这个按钮来实现
+
+![avatar](https://picture.zhanghong110.top/docsify/16526614627542.png)
+
+2.当你代码写在某分支上，现在想要拉取某个其它分支的代码，比如你在自己的dev分支开发，此时想要拉取主分支上的代码
+
+```
+1.先要提交到本地或者push到自己分支
+
+2.git checkout master，切刀想要拉取代码的分支，这边要注意，开发过工具建议使用工具的按钮切换，否则有无法实时检测你分支的情况出现。
+切过去了Update下目标分支，保证代码最新。
+
+3.checkout回自己的分支，然后 git merge origin/master ，将目标分支与自己分支合并，解决冲突即可，同样工具中建议使用提供的按钮，如下图所示
+```
+
+![avatar](https://picture.zhanghong110.top/docsify/16526659072845.png)
+
+> vscode的操作方式，直接切换远程分支目标分支即可，或者切换到本地的目标分支，update下代码。之后切回自己分支。选择合并代码，选下目标分支即可
+
+![avatar](https://picture.zhanghong110.top/docsify/16526674635520.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/16526676093777.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/16526677992624.png)
+
+> 下面稍微讲一下`rebase`
+
+```
+1.拉公共分支最新代码的时候使用rebase，也就是git pull -r或git pull --rebase。这样的好处很明显，我用rebase拉代码下来，但有个缺点就是rebase以后我就不知道我的当前分支最早是从哪个分支拉出来的了，因为基底变了嘛。
+2.往公共分支上合代码的时候，使用merge。如果使用rebase，那么其他开发人员想看主分支的历史，就不是原来的历史了，历史已经被你篡改了。举个例子解释下，比如张三和李四从共同的节点拉出来开发，张三先开发完提交了两次然后merge上去了，李四后来开发完如果rebase上去（注意李四需要切换到自己本地的主分支，假设先pull了张三的最新改动下来，然后执行<git rebase 李四的开发分支>，然后再git push到远端），则李四的新提交变成了张三的新提交的新基底，本来李四的提交是最新的，结果最新的提交显示反而是张三的，就乱套了。
+3.正因如此，大部分公司其实会禁用rebase，不管是拉代码还是push代码统一都使用merge，虽然会多出无意义的一条提交记录“Merge … to …”，但至少能清楚地知道主线上谁合了的代码以及他们合代码的时间先后顺序
+```
+
+ 3.仓库版本要回滚到某个`commit`,我们以`gitlab`为例子
+
+!>此操作会撤销之后的所有提交，慎重使用
+
+```
+进入项目目录下
+git log 一直回车。
+找到递交的commit号，比如 c0b0d7ff52c47a2135cb838aba2ea657db8185c0
+```
+
+或者可以点下图这个按钮复制，就是钱买你那个ID的全部
+
+![avatar](https://picture.zhanghong110.top/docsify/16526693606477.png)
+
+```
+然后找到需要的回滚到的操作git reset --hard 8c67eebf3e95ff31417f256d09832afab4b3b865
+
+然后推送 git push -f -u origin dev 到这个分支即可 -f 代表强制推送，不然你切回到某个版本后提交，它会提示你需要Update
+```
+
+
+
+!>注意，有的时候`master`分支会被保护如果要回退需要解除保护。
+
+```
+我们以gitlab为例子如下图所示，分配主分支可推送角色时还需要在这设置的。
+```
+
+![avatar](https://picture.zhanghong110.top/docsify/16526703273615.png)
+
