@@ -5,6 +5,7 @@
   * [AIO,BIO,NIO](/java/io)
   * [springmvc源码解析](/java/springmvc)
   * [常见的设计模式](/java/designpattern)
+  * [maven常用操作问题解决](/java/maven)
 
 * 前端
   * [ES6](/javascript/es6)
