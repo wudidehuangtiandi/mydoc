@@ -31,7 +31,7 @@
   * [log4j2 JNDI注入漏洞](/other/log4j2jndi)
   * [关于druid连接池的一些探究](/other/druid)
   * [centos的常用操作](/other/centos)
-
+  * [gradle](/other/gradle)
 * [作者相关](#Introduction)
   
 
