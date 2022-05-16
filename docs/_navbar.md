@@ -5,7 +5,7 @@
   * [AIO,BIO,NIO](/java/io)
   * [springmvc源码解析](/java/springmvc)
   * [常见的设计模式](/java/designpattern)
-
+  * [gradle](/java/gradle)
 * 前端
   * [ES6](/javascript/es6)
   * [TS](/javascript/ts)
@@ -32,8 +32,6 @@
   * [log4j2 JNDI注入漏洞](/other/log4j2jndi)
   * [关于druid连接池的一些探究](/other/druid)
   * [centos的常用操作](/other/centos)
-  * [git的配置及使用](/other/git)
-
 * [作者相关](#Introduction)
   
 
