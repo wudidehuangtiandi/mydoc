@@ -1,5 +1,7 @@
 # 高可用的redis集群搭建
 
+## 1.Redis-cluster集群的搭建及使用
+
 Redis支持三种集群方案
 
 -  主从复制模式
@@ -365,3 +367,159 @@ get test
 
 
 > 后期我们还要去增加密码和设置一些配置，以及明确哪些操作会降低效率，之后如果有需要可以自行了解，本文不在赘述。
+
+
+
+## 2.利用redis实现分布锁
+
+> 在很多场景中，为了保证数据的最终一致性，我们可能会用到分布式锁。分布式锁通常有如下几种实现方式
+
+```
+基于数据库实现分布式锁；
+基于缓存（Redis等）实现分布式锁；
+基于Zookeeper实现分布式锁；
+```
+
+在澳洋HPV项目中使用到了基于redis实现的分布式锁，这边记录下
+
+首先为何选型redis来实现分布式锁
+
+（1）Redis有很高的性能；
+（2）Redis命令对此支持较好，实现起来比较方便
+
+redis实现分布式锁主要用到了它的`setnx`命令，`setnx`是`SET if not exists`(如果不存在，则 SET)的简写。
+
+```
+127.0.0.1:6379> setnx lock value1 #在键lock不存在的情况下，将键key的值设置为value1
+(integer) 1
+127.0.0.1:6379> setnx lock value2 #试图覆盖lock的值，返回0表示失败
+(integer) 0
+127.0.0.1:6379> get lock #获取lock的值，验证没有被覆盖
+"value1"
+127.0.0.1:6379> del lock #删除lock的值，删除成功
+(integer) 1
+127.0.0.1:6379> setnx lock value2 #再使用setnx命令设置，返回0表示成功
+(integer) 1
+127.0.0.1:6379> get lock #获取lock的值，验证设置成功
+"value2"
+```
+
+上面这几个命令就是最基本的用来完成分布式锁的命令。
+
+加锁：使用`setnx key value`命令，如果key不存在，设置value(加锁成功)。如果已经存在lock(也就是有客户端持有锁了)，则设置失败(加锁失败)。
+
+解锁：使用`del`命令，通过删除键值释放锁。释放锁之后，其他客户端可以通过`setnx`命令进行加锁。
+
+key的值可以根据业务设置，比如是用户中心使用的，可以命令为`USER_REDIS_LOCK`，value可以使用uuid保证唯一，用于标识加锁的客户端。保证加锁和解锁都是同一个客户端。
+
+> redis分布式锁实现起来主要会涉及以下几个问题
+
+1.如何避免死锁？
+
+```
+解决方式是给key增加过期时间，超时自动解锁即可
+```
+
+2.锁被其它客户端释放了怎么办
+
+```
+解决方式是加锁时设置唯一标识，比如线程ID或者UUID
+```
+
+3.释放锁如何保证原子性
+
+```
+在这里，释放锁的时候会产生一个问题，即判断锁是否为自己所有，使用了GET+DEL会涉及到原子性问题
+采用的解决方案是使用lua脚本，让redis来执行，由于redis处理每个请求都是单线程执行的，所lua脚本执行会是一个原子操作
+```
+
+
+
+!>值得注意的是，在加锁的环节由于redis 2.6.12后可以使用 `SET lock 1 EX 10 NX` 命令，故而是原子性操作，这个在redisTemplate中使用`setIfAbsent`可以完美解决
+
+
+
+下面我们看一下具体的代码实现
+
+```java
+package com.ay.utils;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.stereotype.Component;
+
+import java.util.Collections;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 基于setnx实现redis分布式锁
+ * <p>
+ * by gc_snow
+ */
+@Component
+public class RedisLockUtil {
+
+    private static final DefaultRedisScript<Long> redisScript;
+    private static final Long RELEASE_SUCCESS = 1L;
+
+    /**
+     * lua脚本,用以保证这条命令的原子性
+     */
+    static {
+        DefaultRedisScript defaultRedisScript = new DefaultRedisScript();
+        defaultRedisScript.setResultType(Long.class);
+        defaultRedisScript.setScriptText("if (redis.call('get', KEYS[1]) == ARGV[1]) then return redis.call('del', KEYS[1]) end return 0 ");
+        redisScript = defaultRedisScript;
+    }
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+    private long timeout = 5000;
+
+    /**
+     * 上锁
+     *
+     * @param key   锁标识（锁名称）同一个锁名称并发则失败,名称不同的锁不会互相阻塞。
+     * @param value 线程标识
+     * @return 上锁状态
+     */
+    public boolean lock(String key, String value) throws InterruptedException {
+        long start = System.currentTimeMillis();
+        //非阻塞执行一次，
+        while (true) {
+            //检测是否超时
+            if (System.currentTimeMillis() - start > timeout) {
+                return false;
+            }
+            //执行set命令,setIfAbsent设置锁原子性保证及过期时间增加保证不会死锁
+            Boolean absent = redisTemplate.opsForValue().setIfAbsent(key, value, timeout, TimeUnit.MILLISECONDS);//1
+            //是否成功获取锁，防止自动拆箱造成问题
+            if (absent) {
+                return true;
+            }
+            return false;
+
+        }
+    }
+
+    /**
+     * 解锁
+     *
+     * @param key   锁标识
+     * @param value 线程标识
+     * @return 解锁状态
+     */
+    public boolean unlock(String key, String value) {
+        //使用Lua脚本：先判断是否是自己设置的锁，再执行删除
+        Long result = redisTemplate.execute(redisScript, Collections.singletonList(key), value);
+        //返回最终结果
+        return RELEASE_SUCCESS.equals(result);
+    }
+
+}
+```
+
+
+
+> 至此我们应当明白如何利用redis实现一个分布式锁
