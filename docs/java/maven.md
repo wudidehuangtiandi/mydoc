@@ -1,6 +1,6 @@
 # MAVEN常用操作及问题解决
 
-1.MAVEN的下载及安装
+## 1.MAVEN的下载及安装
 
 [官网下载地址](https://maven.apache.org/download.cgi)
 
@@ -301,5 +301,26 @@ under the License.
 </settings>
 ```
 
-!> 注意maven 3.8.5对ideal 2021.3及以下版本不适配，新版的没试过。这百年应为版本过高我们回退下到3.6.3
+!> 注意maven 3.8.5对ideal 2021.3及以下版本不适配，新版的没试过。因为版本过高我们回退下到3.6.3
 
+> ideal集成maven如下图
+
+![avatar](https://picture.zhanghong110.top/docsify/16526881711904.png)
+
+## 2.常见问题的处理及一些概念及经验
+
+> 1.MAVEN一直处于loading无法成功引入依赖问题
+
+我们经常会碰到配置了可以链接的源`ideal`却一直处于加载状态，我们通常会认为是网络问题，其实增加maven堆栈内存即可顺利下载，如下图所示。
+
+![avatar](https://picture.zhanghong110.top/docsify/1652688551703.png)
+
+
+
+> 2.自定义插件找不到
+
+表现为`Cannot resolve plugin org.apache.maven.plugins:maven-compiler-plugin:<unknown> `此类异常。我们有时候需要指定打包JDK版本或者跳过测试内容时常常需要指定一些自定义的插件。症状如下图所示。
+
+![avatar](https://picture.zhanghong110.top/docsify/1652690253279.png)
+
+解决方式：还没研究出来，待续
