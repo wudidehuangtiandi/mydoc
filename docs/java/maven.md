@@ -12,7 +12,7 @@
 
 ![avatar](https://picture.zhanghong110.top/docsify/16526830153117.png)
 
-接下去打开根目录下conf下配置文件`settings.xml`修改下仓库地址（例子采用阿里镜像，有公司镜像的可以改成公司的），默认镜像及环境配置
+接下去打开根目录下conf下配置文件`settings.xml`修改下本地仓库地址，源（例子采用阿里的，有公司镜像的可以改成公司的）及默认环境配置
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -319,8 +319,579 @@ under the License.
 
 > 2.自定义插件找不到
 
-表现为`Cannot resolve plugin org.apache.maven.plugins:maven-compiler-plugin:<unknown> `此类异常。我们有时候需要指定打包JDK版本或者跳过测试内容时常常需要指定一些自定义的插件。症状如下图所示。
+表现为`Cannot resolve plugin org.apache.maven.plugins:maven-compiler-plugin:<unknown> `此类异常。我们有时候需要指定打包JDK版本或者跳过测试内容时常常需要指定一些自定义的插件。症状如下图所示，我们的`pom`采用了引用`spring-boot-dependencies`约束版本而不是继承`spring-boot-dependencies`。
 
 ![avatar](https://picture.zhanghong110.top/docsify/1652690253279.png)
 
-解决方式：还没研究出来，待续
+问题分析：我们通过查阅spring官方文档可知（[地址](https://docs.spring.io/spring-boot/docs/current/maven-plugin/reference/htmlsingle/)），我们有两种方式去管理spring依赖。继承spring-boot-starter-parent POM。也可能有自己的企业标准parent。如果你不想使用spring-boot-starter-parent，你依然可以通过使用spring-boot-dependencies的scope=import利用依赖管理的便利。根据实验这两种方式都可以引入插件。
+
+当我们的项目是个空pom时可以发现插件依然存在默认版本如下所示
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+<!--    <parent>-->
+<!--        <groupId>org.springframework.boot</groupId>-->
+<!--        <artifactId>spring-boot-starter-parent</artifactId>-->
+<!--        <version>2.6.7</version>-->
+<!--        <relativePath/> &lt;!&ndash; lookup parent from repository &ndash;&gt;-->
+<!--    </parent>-->
+    <groupId>com.example</groupId>
+    <artifactId>demo1</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>demo1</name>
+    <description>demo1</description>
+    <properties>
+        <java.version>1.8</java.version>
+    </properties>
+    <dependencies>
+<!--        <dependency>-->
+<!--            <groupId>org.springframework.boot</groupId>-->
+<!--            <artifactId>spring-boot-starter</artifactId>-->
+<!--        </dependency>-->
+
+<!--        <dependency>-->
+<!--            <groupId>org.springframework.boot</groupId>-->
+<!--            <artifactId>spring-boot-starter-test</artifactId>-->
+<!--            <scope>test</scope>-->
+<!--        </dependency>-->
+    </dependencies>
+
+    <build>
+        <plugins>
+<!--            <plugin>-->
+<!--                <groupId>org.springframework.boot</groupId>-->
+<!--                <artifactId>spring-boot-maven-plugin</artifactId>-->
+<!--            </plugin>-->
+        </plugins>
+    </build>
+
+</project>
+```
+
+![avatar](https://picture.zhanghong110.top/docsify/16529388956358.png)
+
+当我们放开配置时
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>2.6.7</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>demo1</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>demo1</name>
+	<description>demo1</description>
+	<properties>
+		<java.version>1.8</java.version>
+	</properties>
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>
+
+```
+
+![avatar](https://picture.zhanghong110.top/docsify/16529397056179.png)
+
+当我们改成直接引用`spring-boot-dependencies`如下
+
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+<!--    <parent>-->
+<!--        <groupId>org.springframework.boot</groupId>-->
+<!--        <artifactId>spring-boot-starter-parent</artifactId>-->
+<!--        <version>2.6.7</version>-->
+<!--        <relativePath/> &lt;!&ndash; lookup parent from repository &ndash;&gt;-->
+<!--    </parent>-->
+    <groupId>com.example</groupId>
+    <artifactId>demo1</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>demo1</name>
+    <description>demo1</description>
+    <properties>
+        <java.version>1.8</java.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <!-- Import dependency management from Spring Boot -->
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>2.6.7</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+```
+
+![avatar](https://picture.zhanghong110.top/docsify/1652941517357.png)
+
+通过对比可以发现，当直接引用`spring-boot-dependencies`时，版本并不会继承。通过查询spring官网发现有如下语句
+
+If you do not want to use the `spring-boot-starter-parent`, you can still keep the benefit of the dependency management (but not the plugin management) by using an `import` scoped dependency
+
+可见括号中排除了插件版本。由此我们可以猜测，当直接引用`spring-boot-dependencies`时需要增加版本号即可解决问题。
+
+问题解决：增加<version>3.8.1</version>版本号即可
+
+扩展：我们有此处发现，maven带有默认的插件配置，这个源自于哪里呢。
+
+我们来到MAVEN根目录下的lib包中，其中有一个名为`maven-core-3.6.3.jar`的Jar包，我们用压缩工具打开后来到`META-INF/plexus/components.xml`这个xml下，如下（太长我们展示一部分）
+
+```xml
+<component>
+      <role>org.apache.maven.lifecycle.mapping.LifecycleMapping</role>
+      <role-hint>pom</role-hint>
+      <implementation>org.apache.maven.lifecycle.mapping.DefaultLifecycleMapping</implementation>
+      <configuration>
+        <lifecycles>
+          <lifecycle>
+            <id>default</id>
+            
+            <phases>
+              <install>
+                org.apache.maven.plugins:maven-install-plugin:2.4:install
+              </install>
+              <deploy>
+                org.apache.maven.plugins:maven-deploy-plugin:2.7:deploy
+              </deploy>
+            </phases>
+            
+          </lifecycle>
+        </lifecycles>
+      </configuration>
+    </component>
+
+    
+    <component>
+      <role>org.apache.maven.lifecycle.mapping.LifecycleMapping</role>
+      <role-hint>jar</role-hint>
+      <implementation>org.apache.maven.lifecycle.mapping.DefaultLifecycleMapping</implementation>
+      <configuration>
+        <lifecycles>
+          <lifecycle>
+            <id>default</id>
+            
+            <phases>
+              <process-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:resources
+              </process-resources>
+              <compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:compile
+              </compile>
+              <process-test-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:testResources
+              </process-test-resources>
+              <test-compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:testCompile
+              </test-compile>
+              <test>
+                org.apache.maven.plugins:maven-surefire-plugin:2.12.4:test
+              </test>
+              <package>
+                org.apache.maven.plugins:maven-jar-plugin:2.4:jar
+              </package>
+              <install>
+                org.apache.maven.plugins:maven-install-plugin:2.4:install
+              </install>
+              <deploy>
+                org.apache.maven.plugins:maven-deploy-plugin:2.7:deploy
+              </deploy>
+            </phases>
+            
+          </lifecycle>
+        </lifecycles>
+      </configuration>
+    </component>
+
+    
+    <component>
+      <role>org.apache.maven.lifecycle.mapping.LifecycleMapping</role>
+      <role-hint>ejb</role-hint>
+      <implementation>org.apache.maven.lifecycle.mapping.DefaultLifecycleMapping</implementation>
+      <configuration>
+        <lifecycles>
+          <lifecycle>
+            <id>default</id>
+            
+            <phases>
+              <process-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:resources
+              </process-resources>
+              <compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:compile
+              </compile>
+              <process-test-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:testResources
+              </process-test-resources>
+              <test-compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:testCompile
+              </test-compile>
+              <test>
+                org.apache.maven.plugins:maven-surefire-plugin:2.12.4:test
+              </test>
+              <package>
+                org.apache.maven.plugins:maven-ejb-plugin:2.3:ejb
+              </package>
+              <install>
+                org.apache.maven.plugins:maven-install-plugin:2.4:install
+              </install>
+              <deploy>
+                org.apache.maven.plugins:maven-deploy-plugin:2.7:deploy
+              </deploy>
+            </phases>
+            
+          </lifecycle>
+        </lifecycles>
+      </configuration>
+    </component>
+
+    
+    <component>
+      <role>org.apache.maven.lifecycle.mapping.LifecycleMapping</role>
+      <role-hint>maven-plugin</role-hint>
+      <implementation>org.apache.maven.lifecycle.mapping.DefaultLifecycleMapping</implementation>
+      <configuration>
+        <lifecycles>
+          <lifecycle>
+            <id>default</id>
+            
+            <phases>
+              <process-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:resources
+              </process-resources>
+              <compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:compile
+              </compile>
+              <process-classes>
+                org.apache.maven.plugins:maven-plugin-plugin:3.2:descriptor
+              </process-classes>
+              <process-test-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:testResources
+              </process-test-resources>
+              <test-compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:testCompile
+              </test-compile>
+              <test>
+                org.apache.maven.plugins:maven-surefire-plugin:2.12.4:test
+              </test>
+              <package>
+                org.apache.maven.plugins:maven-jar-plugin:2.4:jar,
+                org.apache.maven.plugins:maven-plugin-plugin:3.2:addPluginArtifactMetadata
+              </package>
+              <install>
+                org.apache.maven.plugins:maven-install-plugin:2.4:install
+              </install>
+              <deploy>
+                org.apache.maven.plugins:maven-deploy-plugin:2.7:deploy
+              </deploy>
+            </phases>
+            
+          </lifecycle>
+        </lifecycles>
+      </configuration>
+    </component>
+
+    
+    <component>
+      <role>org.apache.maven.lifecycle.mapping.LifecycleMapping</role>
+      <role-hint>war</role-hint>
+      <implementation>org.apache.maven.lifecycle.mapping.DefaultLifecycleMapping</implementation>
+      <configuration>
+        <lifecycles>
+          <lifecycle>
+            <id>default</id>
+            
+            <phases>
+              <process-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:resources
+              </process-resources>
+              <compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:compile
+              </compile>
+              <process-test-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:testResources
+              </process-test-resources>
+              <test-compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:testCompile
+              </test-compile>
+              <test>
+                org.apache.maven.plugins:maven-surefire-plugin:2.12.4:test
+              </test>
+              <package>
+                org.apache.maven.plugins:maven-war-plugin:2.2:war
+              </package>
+              <install>
+                org.apache.maven.plugins:maven-install-plugin:2.4:install
+              </install>
+              <deploy>
+                org.apache.maven.plugins:maven-deploy-plugin:2.7:deploy
+              </deploy>
+            </phases>
+            
+          </lifecycle>
+        </lifecycles>
+      </configuration>
+    </component>
+
+    
+    <component>
+      <role>org.apache.maven.lifecycle.mapping.LifecycleMapping</role>
+      <role-hint>ear</role-hint>
+      <implementation>org.apache.maven.lifecycle.mapping.DefaultLifecycleMapping</implementation>
+      <configuration>
+        <lifecycles>
+          <lifecycle>
+            <id>default</id>
+            
+            <phases>
+              <generate-resources>
+                org.apache.maven.plugins:maven-ear-plugin:2.8:generate-application-xml
+              </generate-resources>
+              <process-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:resources
+              </process-resources>
+              <package>
+                org.apache.maven.plugins:maven-ear-plugin:2.8:ear
+              </package>
+              <install>
+                org.apache.maven.plugins:maven-install-plugin:2.4:install
+              </install>
+              <deploy>
+                org.apache.maven.plugins:maven-deploy-plugin:2.7:deploy
+              </deploy>
+            </phases>
+            
+          </lifecycle>
+        </lifecycles>
+      </configuration>
+    </component>
+
+    
+    <component>
+      <role>org.apache.maven.lifecycle.mapping.LifecycleMapping</role>
+      <role-hint>rar</role-hint>
+      <implementation>org.apache.maven.lifecycle.mapping.DefaultLifecycleMapping</implementation>
+      <configuration>
+        <lifecycles>
+          <lifecycle>
+            <id>default</id>
+            
+            <phases>
+              <process-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:resources
+              </process-resources>
+              <compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:compile
+              </compile>
+              <process-test-resources>
+                org.apache.maven.plugins:maven-resources-plugin:2.6:testResources
+              </process-test-resources>
+              <test-compile>
+                org.apache.maven.plugins:maven-compiler-plugin:3.1:testCompile
+              </test-compile>
+              <test>
+                org.apache.maven.plugins:maven-surefire-plugin:2.12.4:test
+              </test>
+              <package>
+                org.apache.maven.plugins:maven-rar-plugin:2.2:rar
+              </package>
+              <install>
+                org.apache.maven.plugins:maven-install-plugin:2.4:install
+              </install>
+              <deploy>
+                org.apache.maven.plugins:maven-deploy-plugin:2.7:deploy
+              </deploy>
+            </phases>
+            
+          </lifecycle>
+        </lifecycles>
+      </configuration>
+    </component>
+```
+
+这边可以发现其默认定义的版本。
+
+思考：那么理论上讲，就算我们的项目这么定义应该也不至于报`Cannot resolve plugin org.apache.maven.plugins:maven-compiler-plugin:<unknown> `这种问题，应该会采用默认的工具才对。这里就要注意下我们打的包了，我们可以看见我们根节点是POM，所以应该是
+
+```xml
+ <phases>
+              <install>
+                org.apache.maven.plugins:maven-install-plugin:2.4:install
+              </install>
+              <deploy>
+                org.apache.maven.plugins:maven-deploy-plugin:2.7:deploy
+              </deploy>
+</phases>
+```
+
+这两加一个`DefaultLifecycleMapping`,实际引入后我们发现
+
+![avatar](https://picture.zhanghong110.top/docsify/16529466836950.png)
+
+猜测`DefaultLifecycleMapping`包含了`clean`和`site`两大生命周期，实际，切换打包方式比如用`jar`包的方式也是这样，可以证实。
+
+三大生命周期我们可以在`components.xml`下面看到。
+
+```xml
+<component>
+      <role>org.apache.maven.lifecycle.Lifecycle</role>
+      <implementation>org.apache.maven.lifecycle.Lifecycle</implementation>
+      <role-hint>default</role-hint>
+      <configuration>
+        <id>default</id>
+        
+        <phases>
+          <phase>validate</phase>
+          <phase>initialize</phase>
+          <phase>generate-sources</phase>
+          <phase>process-sources</phase>
+          <phase>generate-resources</phase>
+          <phase>process-resources</phase>
+          <phase>compile</phase>
+          <phase>process-classes</phase>
+          <phase>generate-test-sources</phase>
+          <phase>process-test-sources</phase>
+          <phase>generate-test-resources</phase>
+          <phase>process-test-resources</phase>
+          <phase>test-compile</phase>
+          <phase>process-test-classes</phase>
+          <phase>test</phase>
+          <phase>prepare-package</phase>
+          <phase>package</phase>
+          <phase>pre-integration-test</phase>
+          <phase>integration-test</phase>
+          <phase>post-integration-test</phase>
+          <phase>verify</phase>
+          <phase>install</phase>
+          <phase>deploy</phase>
+        </phases>
+        
+      </configuration>
+    </component><component>
+      <role>org.apache.maven.lifecycle.Lifecycle</role>
+      <implementation>org.apache.maven.lifecycle.Lifecycle</implementation>
+      <role-hint>clean</role-hint>
+      <configuration>
+        <id>clean</id>
+        
+        <phases>
+          <phase>pre-clean</phase>
+          <phase>clean</phase>
+          <phase>post-clean</phase>
+        </phases>
+        <default-phases>
+          <clean>
+            org.apache.maven.plugins:maven-clean-plugin:2.5:clean
+          </clean>
+        </default-phases>
+        
+      </configuration>
+    </component><component>
+      <role>org.apache.maven.lifecycle.Lifecycle</role>
+      <implementation>org.apache.maven.lifecycle.Lifecycle</implementation>
+      <role-hint>site</role-hint>
+      <configuration>
+        <id>site</id>
+        
+        <phases>
+          <phase>pre-site</phase>
+          <phase>site</phase>
+          <phase>post-site</phase>
+          <phase>site-deploy</phase>
+        </phases>
+        <default-phases>
+          <site>
+            org.apache.maven.plugins:maven-site-plugin:3.3:site
+          </site>
+          <site-deploy>
+            org.apache.maven.plugins:maven-site-plugin:3.3:deploy
+          </site-deploy>
+        </default-phases>
+        
+      </configuration>
+```
+
+这样。就能解释了，为啥我们使用下面这样的配置报`Unresolved plugin: 'org.apache.maven.plugins:maven-compiler-plugin:<unknown>'`。首先是应为采用了`spring-boot-dependencies`没有`compiler`插件。另一个是`pom`的原因本来就是不带`compiler`插件，故而实际就没有了，指定后需要指定一个版本。
+
+```xml
+<build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+```
+
