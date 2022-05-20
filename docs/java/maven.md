@@ -1,6 +1,6 @@
 # MAVEN常用操作及问题解决
 
-## 1.MAVEN的下载及安装
+## 一.MAVEN的下载及安装
 
 [官网下载地址](https://maven.apache.org/download.cgi)
 
@@ -307,9 +307,9 @@ under the License.
 
 ![avatar](https://picture.zhanghong110.top/docsify/16526881711904.png)
 
-## 2.常见问题的处理及一些概念及经验
+## 二.常见问题的处理及一些概念及经验
 
-> 1.MAVEN一直处于loading无法成功引入依赖问题
+### 1.MAVEN一直处于loading无法成功引入依赖问题
 
 我们经常会碰到配置了可以链接的源`ideal`却一直处于加载状态，我们通常会认为是网络问题，其实增加maven堆栈内存即可顺利下载，如下图所示。
 
@@ -317,7 +317,7 @@ under the License.
 
 
 
-> 2.自定义插件找不到
+### 2.自定义插件找不到
 
 表现为`Cannot resolve plugin org.apache.maven.plugins:maven-compiler-plugin:<unknown> `此类异常。我们有时候需要指定打包JDK版本或者跳过测试内容时常常需要指定一些自定义的插件。症状如下图所示，我们的`pom`采用了引用`spring-boot-dependencies`约束版本而不是继承`spring-boot-dependencies`。
 
@@ -894,4 +894,217 @@ If you do not want to use the `spring-boot-starter-parent`, you can still keep t
         </plugins>
     </build>
 ```
+
+### 3.MAVEN如何将三方依赖打入jar包
+
+我们采用`maven-assembly-plugin`插件实现自定义打包，首先我们对各种打包插件做一个了解
+
+```
+maven-jar-plugin，默认的打包插件，⽤来打普通的project JAR包
+maven-shade-plugin，⽤来打可执⾏JAR包，也就是所谓的fat JAR包
+maven-assembly-plugin，⽀持⾃定义的打包结构，也可以定制依赖项等
+```
+
+我们在`Pomd`的plugins下加入以下内容
+
+```xml
+<plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>make-assembly</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <descriptors>
+                                <descriptor>${basedir}\src\main\resources\assembly.xml</descriptor>
+                            </descriptors>
+                        </configuration>
+                    </execution>
+                </executions>
+ </plugin>
+```
+
+assembly插件的打包⽅式是通过descriptor（描述符）来定义的。
+Maven预先定义好的描述符有bin，src，project，jar-with-dependencies等。⽐较常⽤的是jar-with-dependencies，它是将所有外部依赖
+JAR都加⼊⽣成的JAR包中，⽐较傻⽠化。
+
+但要真正达到⾃定义打包的效果，就需要⾃⼰写描述符⽂件，格式为XML。
+
+按照上面的定义，我们在`resources`根目录下增加`assembly.xml`,内容如下
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<assembly>
+    <id>jar-with-dependencies</id>
+    <formats>
+        <format>jar</format>
+    </formats>
+    <includeBaseDirectory>false</includeBaseDirectory>
+    <dependencySets>
+        <!-- 默认的配置 -->
+        <dependencySet>
+            <outputDirectory>/</outputDirectory>
+            <useProjectArtifact>true</useProjectArtifact>
+            <unpack>true</unpack>
+            <scope>runtime</scope>
+        </dependencySet>
+        <!-- 增加scope类型为system的配置 -->
+        <dependencySet>
+            <outputDirectory>/</outputDirectory>
+            <useProjectArtifact>true</useProjectArtifact>
+            <unpack>true</unpack>
+            <scope>system</scope>
+        </dependencySet>
+    </dependencySets>
+</assembly>
+```
+
+>id与formats
+>formats是assembly插件⽀持的打包⽂件格式，有zip、tar、tar.gz、tar.bz2、jar、war。可以同时定义多个format。
+>id则是添加到打包⽂件名的标识符，⽤来做后缀。
+>也就是说，如果按上⾯的配置，⽣成的⽂件就是artifactId−{artifactId}-artifactId−{version}-assembly.tar.gz。
+>fileSets/fileSet
+>⽤来设置⼀组⽂件在打包时的属性。
+>directory：源⽬录的路径。
+>includes/excludes：设定包含或排除哪些⽂件，⽀持通配符。
+>fileMode：指定该⽬录下的⽂件属性，采⽤Unix⼋进制描述法，默认值是0644。
+>outputDirectory：⽣成⽬录的路径。
+>files/file
+>与fileSets⼤致相同，不过是指定单个⽂件，并且还可以通过destName属性来设置与源⽂件不同的名称。
+>dependencySets/dependencySet
+>⽤来设置⼯程依赖⽂件在打包时的属性。也与fileSets⼤致相同，不过还有两个特殊的配置：
+>unpack：布尔值，false表⽰将依赖以原来的JAR形式打包，true则表⽰将依赖解成*.class⽂件的⽬录结构打包。
+>scope：表⽰符合哪个作⽤范围的依赖会被打包进去。compile与provided都不⽤管，⼀般是写runtime。
+>
+>按照以上配置打包好后，将.tar.gz⽂件上传到服务器，解压之后就会得到bin、conf、lib等规范化的⽬录结构，⼗分⽅便。
+
+按照上面的配完之后我们还需要在`dependencies`中增加如下配置,即可完成打包。`javax.xml.bind`包为根目录下lib中的包。
+
+```xml
+  <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>javax.xml.bind</artifactId>
+            <version>0.0.1</version>
+            <scope>system</scope>
+            <systemPath>${basedir}/lib/javax.xml.bind.jar</systemPath>
+  </dependency>
+```
+
+扩展:在使用[Maven](https://so.csdn.net/so/search?q=Maven&spm=1001.2101.3001.7020)的时候，如果我们要依赖一个本地的jar包的时候，通常都会使用`<scope>system</scope>`和`<systemPath></systemPath>`来处理。
+
+如果你仅仅是这么做了，在你使用SpringBoot打包插件生成jar包的时候，你会发现这个jar包不会被打进去，进而出现错误。
+这个就需要在maven插接中配置一个`includeSystemScope`属性
+
+```xml
+<plugin>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-maven-plugin</artifactId>
+    <configuration>
+    	<!--设置为true，以便把本地的system的jar也包括进来-->
+        <includeSystemScope>true</includeSystemScope>
+    </configuration>
+</plugin>
+```
+
+这样可以使用`springboot`在`maven`中扩展的的jar命令完成打包。但是非springboot项目不适用。
+
+### 4.MAVEN发布到私服问题
+
+我们有时候需要把项目依赖发布到私服，比如说`jenkins`去拉取项目依赖，首先依赖的是私服上的，特别是有自定义包依赖。
+
+我们已`Nexus`私服为例,releases库是用在正式环境，上传的是稳定版本的代码，snapshots库是用在测试环境，上传的是测试非稳定的代码，这些代码可能还是在开发中。`pom.xml` 中含有 SNAPSHOT 符号的发布到私有仓库中都为快照版，其余都是 RELEASE 版本。
+
+例如
+
+```xml
+<groupId>com.test</groupId>
+<artifactId>cloud</artifactId>
+<version>1.0.1-RELEASE</version>
+
+<groupId>com.test</groupId>
+<artifactId>cloud</artifactId>
+<version>0.0.1-SNAPSHOT</version
+```
+
+`maven`的`setting.xml`中需要增加账号密码配置如下所示
+
+```xml
+	<server>
+	  <id>nexus-releases</id>
+	  <username>admin</username>
+	  <password>xxxx</password>
+	</server>
+	<server>
+	  <id>nexus-snapshots</id>
+	  <username>admin</username>
+	  <password>xxxx</password>
+	</server>
+```
+
+POM配置中如下所示。
+
+```xml
+    <distributionManagement>
+        <repository>
+            <id>nexus-releases</id>
+            <name>Nexus Release Repository</name>
+            <url>http://192.168.1.78:8081/repository/maven-releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>nexus-snapshots</id>
+            <name>Nexus Snapshot Repository</name>
+            <url>http://192.168.1.78:8081/repository/maven-snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
+```
+
+这样配置完`maven` 中使用`deploy`发布即可
+
+### 5.打包的时候跳过测试
+
+我们常常有这样的需求，其实在ideal只要如下图点一下以后打包就可以跳过测试
+
+![avatar](https://picture.zhanghong110.top/docsify/16530277274388.png)
+
+同时，我们也可以通过插件的配置来跳过测试部分。`maven`打包采用`maven-surefire-plugin`插件。我们可以通过以下配置来跳过打包。
+
+```
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <version>3.0.0</version>
+    <configuration>
+        <skipTests>true</skipTests>
+    </configuration>
+</plugin>
+```
+
+### 6.MAVEN缺包的问题
+
+主要错误消息，如题：
+就是`resolution will not be reattempted until the update interval of XXX has elapsed or updates are force`
+
+意思就是：
+
+在 XXX的更新间隔过去或强制更新之前，不会重新尝试解析。
+
+如果你去本地的maven仓库，你会发现，其只有lastUpdate结尾的文件，没有jar包。
+
+这个时候，你无论怎么点击IDEA中的R`eimports All Maven Projects`都是没有用的。原因上面也说了，要么等更新时间过去，要么强制更新。
+maven的默认更新时间为day，即一天更新一次。
+
+所以我们一般都是采用强制更新的方式。
+
+解决办法
+命令行的方式
+`mvn clean install -U`
+
+### 
+
+以后遇到啥疑难杂症还会持续更新，待续
 

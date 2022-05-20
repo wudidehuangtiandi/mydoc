@@ -167,7 +167,7 @@ gitlab中填入以下属性，注意选择的分支需要和Jenkins的一致。�
 
 >JDK，选一个版本后直接自动安装即可，SSH的话配置和前端一样，在系统配置中设置，这两个就不放图片了
 
-maven,如下如所示在jenkins所在机器上防止maven所需配置文件（如果有私服需求），然后jenkins做出对应的配置
+maven,如下如所示在jenkins所在机器上放置maven所需配置文件（如果有私服需求），然后jenkins做出对应的配置
 
 ![avatar](https://picture.zhanghong110.top/docsify/16395490262370.png)
 
