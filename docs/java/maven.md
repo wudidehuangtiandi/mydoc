@@ -1095,7 +1095,7 @@ POM配置中如下所示。
 
 如果你去本地的maven仓库，你会发现，其只有lastUpdate结尾的文件，没有jar包。
 
-这个时候，你无论怎么点击IDEA中的R`eimports All Maven Projects`都是没有用的。原因上面也说了，要么等更新时间过去，要么强制更新。
+这个时候，你无论怎么点击IDEA中的`Reimports All Maven Projects`都是没有用的。原因上面也说了，要么等更新时间过去，要么强制更新。
 maven的默认更新时间为day，即一天更新一次。
 
 所以我们一般都是采用强制更新的方式。
