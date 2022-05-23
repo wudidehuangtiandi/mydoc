@@ -28,6 +28,7 @@
   * [jenkins](/ci/jenkins)
   * [k8s](/ci/k8s)
   * [kubesphere](/ci/kubesphere)
+  * [harbor](/ci/harbor)
 
 * 其它
   * [frp内网穿透](/other/frp)

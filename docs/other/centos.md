@@ -157,6 +157,10 @@ sync; echo 3 > /proc/sys/vm/drop_caches
 cat /etc/passwd
 #切换用户
 su xxxx
+
+#查看CPU信息
+more /proc/cpuinfo
+
 ```
 
 待续
