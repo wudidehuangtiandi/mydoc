@@ -24,7 +24,7 @@
 
 我们进图目录下，修改配置文件`harbor.yml`
 
-首先要修改hostname为机器地址，使用的是http，所以https部分需要注掉。没有搭建自己的数据库，所以使用了默认的数据库，改下默认密码。
+首先要修改hostname为机器地址，使用的是http，所以https部分需要注掉。没有搭建自己的数据库，所以使用了默认的数据库，改下默认密码。部分配置文件如下。
 
 ```yaml
 # Configuration file of Harbor
@@ -58,11 +58,11 @@ harbor_admin_password: xxxxx #改下默认密码
 
 
 
-!>机器需要安装[docker](https://so.csdn.net/so/search?q=docker&spm=1001.2101.3001.7020)以及docker-compose。而且要对应好版本
+!>机器需要安装`docker`以及`docker-compose`。而且要对应好版本
 
 使用docker version命令查看docker版本，不清楚docker怎么下载的参见本文档docker部分，此处是`20.10.14`
 
-Compose 是用于定义和运行多容器 Docker 应用程序的工具。通过 Compose，您可以使用 YML 文件来配置应用程序需要的所有服务。然后，使用一个命令，就可以从 YML 文件配置中创建并启动所有服务。[官方地址](https://github.com/docker/compose/releases)
+Harbor中依赖类似redis、mysql、pgsql等很多存储系统，所以它需要编排很多容器协同起来工作，因此VMWare Harbor在部署和使用时，需要借助于Docker的单机编排工具( Docker compose)来实现。您可以使用 YML 文件来配置应用程序需要的所有服务。然后，使用一个命令，就可以从 YML 文件配置中创建并启动所有服务。[官方地址](https://github.com/docker/compose/releases)
 
 ```sh
 sudo curl -L https://get.daocloud.io/docker/compose/releases/download/v2.5.1/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
@@ -101,7 +101,5 @@ registryctl         "/home/harbor/start.…"   registryctl         running (heal
 
 
 
-安装结束之后，可以通过ip地址访问Harbor镜像仓库，使用默认的账号和密码（admin/密码为配置文件中自己设置的),重置密码比较麻烦，宿主机/data下的文件会有影响。如果密码不对，进入PG库修改也可能不行，原因就在此。
-
-
+安装结束之后，可以通过ip地址访问Harbor镜像仓库，使用默认的账号和密码（admin/密码为配置文件中自己设置的),重置密码比较麻烦，这些镜像默认的映射人间在宿主机`/data`下（可以在初始化时在`harbor.yml`中的`data_volume: /data`修改），会有影响。如果密码不对，进入PG库修改也可能不行，原因就在此。
 
