@@ -1,8 +1,8 @@
 # gradle
 
-## gradle介绍
+## 1. gradle介绍
 
-### gradle简介   
+### 1.1 gradle简介   
 
 参考链接：https://blog.csdn.net/freekiteyu/article/details/80677361
 
@@ -15,13 +15,13 @@ Maven：Maven 解决了规范性的问题，也顺带解决了依赖项统一管
 
 Gradle综合了 Ant 和 Maven 的优点，吸收了 Ant 中 task 的思想，然后把 Maven 的目录规范以及仓库思想也融合了进来，但允许用户自由的修改默认的规范（如：可随意修改源码目录），配置文件则采用 Groovy 语言来书写，Groovy 是一门可编程语言，配置文件本身就可以视为一份源代码，并最终交由 Gradle 来处理执行。它不仅仅是一个构建工具，还是一个开发框架,它基于 Groovy 语言。 我们可以通过 Groovy 语言去写自己的Gradle 插件，也可以去编写指定的脚本去改变构建规则。
 
-### groovy language
+### 1.2 groovy language
 
 参考链接1：https://blog.csdn.net/freekiteyu/article/details/80846149
 
 参考链接2：https://developer.aliyun.com/article/885778
 
-#### 简介
+#### 1.2.1 简介
 
 Groovy 同时本身是一种 `DSL`
 
@@ -39,7 +39,7 @@ Groovy 同时本身是一种 `DSL`
 
 ​        Groovy 程序运行时，首先被编译成 Java 字节码，然后通过 JVM 来执行，实际上，由于 Groovy Code 在真正执行的时候，已经变成了 Java 字节码， 因此 JVM 根本不知道自己运行的是 Groovy 代码
 
-#### 基本语法
+#### 1.2.2 基本语法
 
 - 变量
 
@@ -194,11 +194,11 @@ def bytes = targetFile.getBytes()//返回文件对应的 byte()
 
 ```
 
-### dsl
+### 1.3 dsl
 
 参考链接：https://blog.csdn.net/freekiteyu/article/details/81066845
 
-#### 简介
+#### 1.3.1 简介
 
 Gradle 是一个编译打包工具，但实际上它也是一个编程框架。Gradle 有自己的 API 文档，对应链接如下：
 
@@ -208,7 +208,7 @@ Gradle 是一个编译打包工具，但实际上它也是一个编程框架。G
 
 因此，编写 Gradle 脚本时，我们实际上就是调用 Gradle 的 API 编程。
 
-#### 基本组件
+#### 1.3.2 基本组件
 
 - Project
 
@@ -224,7 +224,7 @@ Gradle 中，每一个待编译的工程都是一个 Project。
 
 整体来看，Gradle 作为一个框架，负责定义通用的流程和规则；根据不同的需求，实际的编译工作则通过具体的插件来完成。
 
-#### 构建过程
+#### 1.3.3 构建过程
 
 ```javascript
 ProjectName
@@ -242,7 +242,7 @@ ProjectName
 
 ```
 
-#### 生命周期
+#### 1.3.4 生命周期
 
 - 初始化阶段
 
@@ -272,7 +272,7 @@ Settings 对象
 
 > 对于其他 gradle 文件，除非定义了 class，否则会转换成一个实现了 Script 接口的对象。
 
-#### Task
+#### 1.3.5 Task
 
 Task 是 Gradle 中的一种数据类型，它代表了一些要执行或者要干的工作。不同的插件可以添加不同的 Task。每一个 Task 都需要和一个 Project 关联。
 
@@ -349,7 +349,7 @@ finalizedBy：在 Task 执行完之后要执行的 Task。
 
 Gradle 默认支持传递性依赖，比如当前工程依赖包A，包 A 依赖包 B，那么当前工程会自动依赖包 B。同时，Gradle 支持排除和关闭依赖性传递。
 
-#### 常用命令
+#### 1.3.6 常用命令
 
 > $ gradle tasks // 查看根目录包含的 task
 >
@@ -361,7 +361,7 @@ Gradle 默认支持传递性依赖，比如当前工程依赖包A，包 A 依赖
 >
 > $ gradle build //构建项目
 
-### groovy与dsl的关系
+### 1.4 groovy与dsl的关系
 
 ```groovy
 //project 的buildScript方法  实际返回的是一个ScriptHandler对象
@@ -400,25 +400,25 @@ task printFoobar {
 
 ```
 
-### 插件开发
+### 1.5 插件开发
 
 参考文档：https://blog.csdn.net/freekiteyu/article/details/81353922
 
 在学习中。。。
 
-### 插件发布
+### 1.6 插件发布
 
 参考文档：https://blog.csdn.net/freekiteyu/article/details/81449721
 
 在学习中。。。
 
-## gradle使用
+## 2. gradle使用
 
 参考链接1：https://www.jianshu.com/p/724d1abc61a2
 
 参考链接2：https://www.jianshu.com/p/7ccdca8199b8
 
-### 引入插件
+### 2.1 引入插件
 
 #### 高版本`plugins`
 
@@ -479,9 +479,9 @@ plugins{
    apply plugin: 'org.springframework.boot' //社区插件，需要事先引入，不必写版本号
    ```
 
-### 组成部分
+### 2.2 组成部分
 
-#### 局部变量
+#### 2.2.1 局部变量
 
 参考链接：https://blog.csdn.net/yue530tomtom/article/details/79399417
 
@@ -500,7 +500,7 @@ task testLocalVar() {
 //println("local varInner's value:["+varInner+"]")
 ```
 
-#### 属性定义
+#### 2.2.2 属性定义
 
 **定义扩展属性**
 
@@ -590,7 +590,7 @@ println project.otherProp == "a"
 println project.ext["otherProp"] == "a"
 ```
 
-#### 属性修改/指定
+#### 2.2.3 属性修改/指定
 
 ```groovy
 //修改项目属性(可选)
@@ -598,7 +598,7 @@ group 'pkaq'
 version '1.0-SNAPSHOT'
 ```
 
-#### 定义仓库
+#### 2.2.4 定义仓库
 
 ```groovy
 //定义仓库,当然gradle也可以使用各maven库 ivy库 私服 本地文件等,后续章节会详细介绍(可选)
@@ -607,7 +607,7 @@ repositories {
 }
 ```
 
-#### 定义(申明)依赖
+#### 2.2.5 定义(申明)依赖
 
 通常而言，依赖管理包括两部分，对依赖的管理以及发布物的管理；依赖是指构建项目所需的构件(jar包等)。例如，对于一个应用了spring普通的java web项目而言，spring相关jar包即项目所需的依赖。发布物，则是指项目产出的需要上传的项目产物。
 
@@ -627,7 +627,7 @@ dependencies {
 
 如果你想某个库每次构建时都检查是否有新版本，那么可以采用`+`来让Gradle在每次构建时都检查并应用最新版本的依赖。当然也可以采用1.x,2.x的方式来获取某个大版本下的最新版本。
 
-#### 自定义任务
+#### 2.2.6 自定义任务
 
 ```groovy
 //自定义任务(可选)
@@ -644,11 +644,11 @@ t1
 t2
 ```
 
-### 依赖管理
+### 2.3 依赖管理
 
 > 依赖管理包括两部分，对依赖的管理以及发布物的管理；依赖是指构建项目所需的构件(jar包等)。例如，对于一个应用了spring普通的java web项目而言，spring相关jar包即项目所需的依赖。发布物，则是指项目产出的需要上传的项目产物。
 
-#### 采用变量统一控制版本号
+#### 2.3.1 采用变量统一控制版本号
 
 方式一：
 
@@ -781,7 +781,7 @@ E:.
             gradle-wrapper.properties
 ```
 
-#### 依赖的坐标
+#### 2.3.2 依赖的坐标
 
 > 仓库中构件（jar包）的坐标是由configurationName "group:name:version:classifier@extension"组成的字符串构成，如同Maven中的GAV坐标，Gradle可借由此来定位你想搜寻的jar包。
 
@@ -806,7 +806,7 @@ testCompile "junit:junit:${ver}"
 | classifier        | 类库版本，在前三项相同的情况下，如果目标依赖还存在对应不同JDK版本的版本，可以通过此属性指明 |
 | extension         | 依赖的归档类型，如aar、jar等，默认不指定的话是jar            |
 
-#### 依赖的范围
+#### 2.3.3 依赖的范围
 
 | 名称            | 说明                                                         |
 | --------------- | ------------------------------------------------------------ |
@@ -828,7 +828,7 @@ testCompile "junit:junit:${ver}"
 
 <font color="red">**3.在同一个module下，implementation和compile的使用效果相同,不同的module下implementation关键字引用的包对于其他module来说是不可见的**</font>
 
-### 依赖的分类
+### 2.4 依赖的分类
 
 | 类型       | 描述                                                         |
 | ---------- | ------------------------------------------------------------ |
@@ -838,7 +838,6 @@ testCompile "junit:junit:${ver}"
 | 内置依赖   | 跟随Gradle发行包或者基于Gradle API的一些依赖,通常在插件开发时使用 |
 | 子模块依赖 | 还没搞清楚是什么鬼                                           |
 
-#### 外部依赖
+#### 2.4.1 外部依赖
 未完待续。。。
-
 
