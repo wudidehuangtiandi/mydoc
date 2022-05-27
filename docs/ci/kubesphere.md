@@ -41,7 +41,6 @@ chmod +x kk
 > 下面我们修改下这个配置文件，主要改下hosts和执行下控制节点和工作节点，其它都可以保持默认。
 
 ```yaml
-
 apiVersion: kubekey.kubesphere.io/v1alpha2
 kind: Cluster
 metadata:
@@ -340,5 +339,67 @@ kubesphere-system              ks-installer-69df988b79-wk2wk                    
 > 下面我们去云服务器开下端口,开放30000到32767即可，至此一个最低限度的kubesphere集群就安装完成了
 
 ## 二.集群的使用
+
+> 下面我们来研究下如何使用它
+
+## 1.系统权限
+
+进入kubesphere,我们可以点击左上角的平台管理，选择访问控制，来分配角色和权限
+
+![avatar](https://picture.zhanghong110.top/docsify/16536123982461.png)
+
+它这边是支持多租户的，所以会有企业空间这么一个选项
+
+![avatar](https://picture.zhanghong110.top/docsify/16536125537980.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/16536125732204.png)
+
+可以看到默认有如下四个角色，第一个用来创建及分配企业空间，第二个用来添加用户，第三个是平台普通用户，第四个是管理员。这些权限都是平台级别的，当你用某个用户进入后，比如你平台角色是`[workspaces-manager]`进入后菜单就会和下图类似（版本不同，懒得截图）
+
+![avatar](https://picture.zhanghong110.top/docsify/165361284717.png)
+
+就是你自己的企业，可以自己分配角色及邀请平台用户了。在分配项目后又有一个角色部分。搞得还是比较复杂的，可以自行研究。
+
+## 2.项目部署
+
+我们刚进系统，默认使用的是admin用户，此时我们没有学习以上这套权限，可能比较懵逼，我们演示环境就只使用`admin`账户展示，首先刚进去的页面如下。
+
+![avatar](https://picture.zhanghong110.top/docsify/16536143268108.png)
+
+默认是处于工作台界面，可以看见左上角，平台管理，应用商店,平台资源中可以看到企业空间及用户管理，还有应用模板，我们先记下来
+
+然后点击左上角平台管理，有如下界面
+
+![avatar](https://picture.zhanghong110.top/docsify/16536146928421.png)
+
+我们如果点开访问控制，就会回到下述页面，拥有的企业空间及用户就是我们刚才在平台资源中看到的企业空间及用户。
+
+![avatar](https://picture.zhanghong110.top/docsify/16536125537980.png)
+
+我们如果不点击访问控制，点击集群管理就是下面这个页面
+
+![avatar](https://picture.zhanghong110.top/docsify/16536148834907.png)
+
+这个页面的话，都是集群相关的信息，这里面的项目，主要功能是创建，分配企业空间及配额控制，总体来说都是集群层面的东西。如果我们真的要创建项目。不是从这里面进去。
+
+我们应当从刚才访问控制的企业空间或者平台资源的企业空间进入。如下图
+
+![avatar](https://picture.zhanghong110.top/docsify/16536150968568.png)
+
+进入后创建项目然后再点击进入如下图
+
+![avatar](https://picture.zhanghong110.top/docsify/16536151762605.png)
+
+终于我们终于进入了项目空间
+
+![avatar](https://picture.zhanghong110.top/docsify/1653615293240.png)
+
+> 到这里我们初步进入了一个项目空间，可以开始部署了。下面的内容需要一定的K8S基础及代码基础及中间件基础及docker基础。
+
+我们部署一个项目需要选一种工作负载，对应K8S的pod控制器，部署，有状态副本集，守护进程，分别对应K8S的`deployment`,`statefulset`, `daemonset`（一般中间件选择第二个，自己的服务选择第一个）。其次要选择存储在哪里，存储配置对应K8S的`pvc`(这边下面还有配置选项，可以映射配置文件)。最后是应用路由，对应K8S的`service`暴露访问方式。
+
+![avatar](https://picture.zhanghong110.top/docsify/16536173727141.png)
+
+### 2.2.1 mysql的示例部署
 
 待续
