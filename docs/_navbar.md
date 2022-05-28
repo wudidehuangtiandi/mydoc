@@ -17,6 +17,7 @@
 
 * 数据库
   * [函数](/dbs/function)
+  * [mysql](/dbs/mysql)
 
 * 服务器
   * [tomcat源码解析](/servers/tomcat)
