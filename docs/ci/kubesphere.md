@@ -1,3 +1,5 @@
+
+
 # KubeSphere 
 
 ## 一.集群的配置及安装
@@ -400,6 +402,193 @@ kubesphere-system              ks-installer-69df988b79-wk2wk                    
 
 ![avatar](https://picture.zhanghong110.top/docsify/16536173727141.png)
 
-### 2.2.1 mysql的示例部署
+### 2.2.1 示例部署
 
-待续
+> 本次示例我们从简单的组件开始，然后均以集群为主
+
+#### 2.2.1.1 nacos
+
+nacos没有数据要挂载，只需要配置即可，且集群化比较简单。
+
+我们进入项目空间后先增加配置如下图
+
+![avatar](https://picture.zhanghong110.top/docsify/16538979653792.png)
+
+名称如下，然后点击下一步
+
+![avatar](https://picture.zhanghong110.top/docsify/16538981928963.png)
+
+我们先看下nacos的的conf。
+
+![avatar](https://picture.zhanghong110.top/docsify/1653898387939.png)
+
+根据官网可知一个是nacos的配置文件，一个是集群用。[nacos官网地址](https://nacos.io/zh-cn/docs/cluster-mode-quick-start.html)。我们将application.properties中的配置复制过去，创立键值对。
+
+![avatar](https://picture.zhanghong110.top/docsify/16538988942434.png)
+
+我们先都粘贴默认的配置文件,第二个配置文件cluster.conf
+![avatar](https://picture.zhanghong110.top/docsify/16538997141059.png)
+
+完了以后我们创建一个有状态服务，如下
+
+![avatar](https://picture.zhanghong110.top/docsify/165389983624.png)
+
+命名为demo-nacoe，点击下一步
+
+![avatar](https://picture.zhanghong110.top/docsify/1653899919910.png)
+
+创建三个副本，选择容器
+
+![avatar](https://picture.zhanghong110.top/docsify/16539000226133.png)
+
+我们去dockerhub选择`2.0.4`（和配置文件契合即可）副本，添加到项目中。注意只需要名称不需要`docker pull`
+
+![avatar](https://picture.zhanghong110.top/docsify/16539002057276.png)
+
+做如下配置
+
+![avatar](https://picture.zhanghong110.top/docsify/16539005004341.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/16539005466703.png)
+
+nacos没啥卷挂在，挂个配置文件即可，如下
+
+![avatar](https://picture.zhanghong110.top/docsify/16539007216888.png)
+
+选择字典，只读挂载，如下图。挂到`/home/nacos/conf`下个路径下。意思就是把nacos的默认配置文件覆盖掉，这个地址可以去nacos镜像或者官网上看下。
+
+![avatar](https://picture.zhanghong110.top/docsify/16539008439504.png)
+
+!>注意，这样操作结果覆盖掉了配置文件，就生了这两货，所以不对，应该如下操作，挂载配置文件子路径，就是我们设置的配置文件一个个覆盖的意思
+
+如下操作指定子路径，选择特定键值，两个配置文件都要这么操作。
+
+![avatar](https://picture.zhanghong110.top/docsify/16539064192855.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/16539066906026.png)
+
+最后一个高级设置不用管，点击创建即可。
+
+!>注意，这边的话配置文件忘记讲了，有两个注意点，第一，nacos的application.properties需要改到能连上的库,还有就是那个集群的端口，为了能够在服务挂了的情况下代替的服务依然能够访问，需要使用域名，这边是 demo-nacos-v1-0.demo-nacos.qwer123.svc.cluster.local（cluster.conf要改成前面这个+`:8848`）
+
+域名这个是由`statefulset`POD控制器决定的，有状态服务的特点是（这个我们K8S中漏了）
+
+Pod一致性：包含次序（启动、停止次序）、网络一致性。此一致性与Pod相关，与被调度到哪个node节点无关；
+稳定的次序：对于N个副本的StatefulSet，每个Pod都在[0，N)的范围内分配一个数字序号，且是唯一的；
+稳定的网络：Pod的hostname模式为( s t a t e f u l s e t 名 称 ) − (statefulset名称)-(statefulset名称)−(序号)；
+稳定的存储：通过VolumeClaimTemplate为每个Pod创建一个PV。删除、减少副本，不会删除相关的卷。
+
+那么`demo-nacos-v1-0.demo-nacos.qwer123.svc.cluster.local`这玩意怎么得到的呢，我们可以祟拜你进个副本,ping下dns，dns在kuberSphere上可以看到容器集群的DNS，这样进去一Ping除了名称后缀，其它的都相同，所以这边就是`demo-nacos-v1-0.demo-nacos.qwer123.svc.cluster.local`，`demo-nacos-v1-1.demo-nacos.qwer123.svc.cluster.local` ， `demo-nacos-v1-2.demo-nacos.qwer123.svc.cluster.local`（实际配置时都要加上:8848）
+
+
+
+然后可以进去看下容器情况，查看下容器日志
+
+![avatar](https://picture.zhanghong110.top/docsify/16539085815023.png)
+
+日志如下所示
+
+```
+
+          ,--.
+
+        ,--.'|
+
+    ,--,:  : |                                           Nacos 2.0.4
+
+ ,`--.'`|  ' :                       ,---.               Running in cluster mode, All function modules
+
+ |   :  :  | |                      '   ,'\   .--.--.    Port: 8849
+
+ :   |   \ | :  ,--.--.     ,---.  /   /   | /  /    '   Pid: 1
+
+ |   : '  '; | /       \   /     \.   ; ,. :|  :  /`./   Console: http://10.233.96.111:8849/nacos/index.html
+
+ '   ' ;.    ;.--.  .-. | /    / ''   | |: :|  :  ;_
+
+ |   | | \   | \__\/: . ..    ' / '   | .; : \  \    `.      https://nacos.io
+
+ '   : |  ; .' ," .--.; |'   ; :__|   :    |  `----.   \
+
+ |   | '`--'  /  /  ,.  |'   | '.'|\   \  /  /  /`--'  /
+
+ '   : |     ;  :   .'   \   :    : `----'  '--'.     /
+
+ ;   |.'     |  ,     .-./\   \  /            `--'---'
+
+ '---'        `--`---'     `----'
+
+ 
+
+ 2022-05-30 19:01:17,797 INFO The server IP list of Nacos is []
+
+ 
+
+ 2022-05-30 19:01:18,798 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:19,799 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:20,803 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:21,810 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:22,813 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:23,815 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:24,816 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:25,816 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:26,816 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:27,823 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:28,824 INFO Nacos is starting...
+
+ 
+
+ 2022-05-30 19:01:29,137 INFO Nacos started successfully in cluster mode. use external storage
+
+ 
+```
+
+成功了，我们创建一个工作负载，做一个端口暴露，还是在服务中，如下点击
+
+![avatar](https://picture.zhanghong110.top/docsify/16539090545943.png)
+
+随便起个名字，然后下面这边选个有状态副本集。端口全都选择8848
+
+![avatar](https://picture.zhanghong110.top/docsify/16539093195643.png)
+
+然后下一步，点击NodePort即可
+
+![avatar](https://picture.zhanghong110.top/docsify/16539094753409.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/16539095571370.png)
+
+我们这就搞定了，三个节点随便找个端口访问。比如（这边给忘了8849也要映射下）
+
+http://39.107.48.128:31904/nacos/#/login
+
+连接成功，测试链接就可以了。
