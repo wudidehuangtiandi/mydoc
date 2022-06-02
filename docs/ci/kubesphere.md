@@ -644,7 +644,145 @@ Nacos2.0版本相比1.X新增了gRPC的通信方式，因此需要增加2个端�
 
 > 再尝试链接，问题解决。
 
-#### 2.2.1.2  mysql
+#### 2.2.1.2  ruoyi gateway
 
-> 我们依然采用pxc模式搭建mysql集群，这次我们换一个8.0版本的
+> 例如mysql及redis这些集群上云，通过上面nacos的配置我们可以看出集群的配置需要服务本身也支持（包括数据同步啊之类的都要考虑），我们之后在研究，下面演示个微服务服务上云，采用手动模式。
 
+在这之前我们先回顾下不用K8S的docker部署。
+
+我们除了需要知道gateway的端口（方便nginx映射）意外还需要暴露前端的访问地址。
+
+上k8s以后，gateway的端口就不用知道了，我们使用k8s service 提供的DNS域名来访问，这样无论启动多少个网关pod都不需要Ip,其它服务的访问也可以统一暴露一样的端口(pod隔离)。
+
+准备工作: 需要一个harbor私服或者阿里云的镜像私服（个人版免费的）。
+
+**镜像的制作与推送**
+
+ruoyi自带了dockerfile如下,aoyang为公司名，这边以前全局替换的，影响不大。
+
+```dockerfile
+# 基础镜像
+FROM  openjdk:8-jre
+# author
+MAINTAINER aoyang
+# 挂载目录
+VOLUME /home/aoyang
+# 创建目录
+RUN mkdir -p /home/aoyang
+# 指定路径
+WORKDIR /home/aoyang
+# 复制jar文件到路径
+COPY ./jar/aoyang-gateway.jar /home/aoyang/aoyang-gateway.jar
+# 启动网关服务
+ENTRYPOINT ["java","-jar","aoyang-gateway.jar"]
+```
+
+我们使用它还需要做点改造
+
+```dockerfile
+# 基础镜像,改成jdk,方便以后进容器输出一些jdk才带的命令
+FROM  openjdk:8-jdk
+
+LABEL maintainer=gc
+
+#环境,使用生产环境（nacos要有）,我们使用k8s内部集群的话这边应该还要加上--spring.cloud.nacos.discovery.server-addr=service的DNS地址+端口 及--spring.cloud.nacos.config.server-add=service的DNS地址+端口。
+ENV PARAMS="--server.port=8080 --spring.profiles.active=prod"
+
+#修改镜像时区
+RUN /bin/cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo 'Asia/Shanghai' >/etc/timezone
+
+#文件复制,实际根目录只有一个jar包
+COPY target/*.jar /app.jar
+
+#所有服务统一暴露8080,pod ip不同
+EXPOSE 8080
+
+#启动脚本，要包含环境变量params,-Djava.security.edg=file:/dev/./urandom这个是固定值用于防止启动时阻塞。
+ENTRYPOINT ["/bin/sh","-c","java -Djava.security.edg=file:/dev/./urandom -jar app.jar ${PARAMS}"]
+```
+
+我们新建一个文件夹随便叫个名字，里面新建target文件夹，然后新建文件Dockerfile,将这里面的内容贴进去。
+
+![avatar](https://picture.zhanghong110.top/docsify/16541394543973.png)
+
+我们将它传到master节点。
+
+```shell
+#进入目录
+cd ry-gateway
+
+#构建
+docker build -t ry-gateway:v1.0 -f Dockerfile .
+
+#构建完成
+Successfully built bac184287646
+Successfully tagged ay-gateway:v1.0
+[root@k8s-master ry-gateway]# docker images
+REPOSITORY                           TAG       IMAGE ID       CREATED          SIZE
+ay-gateway                           v1.0      bac184287646   42 seconds ago   627MB
+```
+
+下面就是docker登录仓库，然后推送到仓库。
+
+我们这采用harbor私有库,发现报如下错，这是因为我们[docker](https://so.csdn.net/so/search?q=docker&spm=1001.2101.3001.7020) client使用的是https，而我们搭建的Harbor私库用的是http的，所有会有这样的报错，导致访问不了。
+
+```shell
+[root@k8s-master ry-gateway]# docker login http://xxx.xxx.xxx.xxx:xx/
+Username: admin
+Password: 
+Error response from daemon: Get "https://xxx.xxx.xxx.xxx:xx/v2/": http: server gave HTTP response to HTTPS client
+```
+
+[解决方案](https://blog.csdn.net/qing040513/article/details/115750334)可以看下，我这边换成我私服布置的docker就可以直连了。
+
+```shell
+[root@centerm ry-gateway]# docker login 127.0.0.1:xx
+Username: admin
+Password: 
+WARNING! Your password will be stored unencrypted in /root/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+
+Login Succeeded
+```
+
+推送镜像
+
+```shell
+#镜像不是都能推的，需要先改名成符合规范的名称,我们在harbor中创建名为demo的项目,然后比如我们镜像现在叫这个
+[root@centerm ry-gateway]# docker images
+REPOSITORY                      TAG        IMAGE ID       CREATED         SIZE
+ry-gateway                      v1.0       5de2acb5dcc4   9 minutes ago   627MB
+
+#改名,改成harbor地址+项目名+镜像名：版本 , 或者docker tag 5de2acb5dcc4 xxx.zhanghong110.top/demo/ry-gateway:v1.0,这边需要额外配置否则会报X509，建议还是ip的方式，拉取的时候用域名不影响
+docker tag 5de2acb5dcc4 127.0.0.1:89/demo/ry-gateway:v1.0
+
+#推送,前面是重命名的镜像+个版本号即可，或者docker push xxx.zhanghong110.top/demo/ry-gateway:v1.0,这边需要额外配置否则会报X509，建议还是ip的方式，拉取的时候用域名不影响
+docker push 127.0.0.1:89/demo/ry-gateway:v1.0
+```
+
+推送后看到如下结果即表示成功了。
+
+![avatar](https://picture.zhanghong110.top/docsify/16541516694060.png)
+
+下面我们登录kuberSphere尝试部署。
+
+!>注意，这里发现K8s安装的docker要链接私服还是得用https，显然我们不太可能一台机器一台机器去改，所以呢就需要harbor以https的方式安装
+
+完了之后，我们去配置中心密钥里面增加一个类型为仓库镜像的密钥。
+
+![avatar](https://picture.zhanghong110.top/docsify/16541786325806.png)
+
+之后我们会去创建工作负载，使用无状态的
+
+![avatar](https://picture.zhanghong110.top/docsify/16541789569102.png)
+
+然后这样选择使用默认端口，后面也不用挂存储卷一直下一步即可。
+
+![avatar](https://picture.zhanghong110.top/docsify/16541837671838.png)
+
+![avatar](https://picture.zhanghong110.top/docsify/16541834977546.png)
+
+在检查下日志，发现运行良好。
+
+> 至此我们完成了手动部署一个微服务到KuberSphere上

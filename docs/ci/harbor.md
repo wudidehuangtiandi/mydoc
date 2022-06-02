@@ -103,3 +103,67 @@ registryctl         "/home/harbor/start.…"   registryctl         running (heal
 
 安装结束之后，可以通过ip地址访问Harbor镜像仓库，使用默认的账号和密码（admin/密码为配置文件中自己设置的),重置密码比较麻烦，这些镜像默认的映射人间在宿主机`/data`下（可以在初始化时在`harbor.yml`中的`data_volume: /data`修改），会有影响。如果密码不对，进入PG库修改也可能不行，原因就在此。
 
+!>注意，由于docker拉取镜像默认使用https，这边为了避免以后麻烦，请尽量使用Https去安装
+
+这边如果是公司内网，可以自签名证书，可以参考[这个地址](https://blog.csdn.net/networken/article/details/107502461)配置，我这边的话用公网域名。
+
+我们在腾讯云下载 `xxx.zhanghong110.top`的nginx证书
+
+进入服务器data路径下新建cert目录，然后么新建把
+
+crt 和key结尾的两个文件复制进去，然后用以下命令解析,得到cert结尾的文件
+
+```shell
+openssl x509 -inform PEM -in xxx.zhanghong110.top_bundle.crt -out xxx.zhanghong110.top.cert
+```
+
+将服务器证书，密钥和CA文件复制到Harbor主机上的Docker证书文件夹中。您必须首先创建适当的文件夹
+
+```shell
+mkdir -p /etc/docker/certs.d/xxx.zhanghong110.top/
+```
+
+然后把刚刚生成的cert结尾的文件和key结尾的文件粘进去，xxx.zhanghong110.top_bundle.crt这个也要粘进去，并且重命名把_bundle去掉
+
+然后修改配置文件`harbor.yml`,这边crt文件记得改下名要一致。
+
+```shell
+https:
+  # https port for harbor, default is 443
+  port: 443
+  # The path of cert and key files for nginx
+  certificate: /data/cert/xxx.zhanghong110.top.crt
+  private_key: /data/cert/xxx.zhanghong110.top.key
+```
+
+配置文件里还有这个hostname一定要换成域名否则docker login还是会报http异常
+
+```shell
+hostname: xxx.zhanghong110.top
+```
+
+运行prepare脚本以启用HTTPS。
+Harbor将nginx实例用作所有服务的反向代理。您可以使用prepare脚本来配置nginx为使用HTTPS。该prepare在harbor的安装包，在同级别的install.sh脚本。
+
+```shell
+./prepare
+```
+
+如果Harbor正在运行，请停止并删除现有实例。
+您的镜像数据保留在文件系统中，因此不会丢失任何数据。
+
+```shell
+docker-compose down -v
+```
+
+重启harbor：
+
+```shell
+docker-compose up -d
+```
+
+
+
+如果想要自签名的方式配置(仅适用于公司内部)可以参考[这个链接](https://blog.csdn.net/networken/article/details/107502461)
+
+> 我们再次访问，即可https访问了。

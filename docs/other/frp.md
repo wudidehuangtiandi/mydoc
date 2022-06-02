@@ -189,3 +189,19 @@ remote_port = 6002
 ```
 
 测试链接没问题，注意需要开启跳板机对应端口以及ssh名称需要不重复比如第一台机器是ssh第二台就叫ssh2
+
+### 四.https点对点穿透
+
+```
+[https]
+type = https
+custom_domains = xxx.zhanghong110.top
+plugin = https2https
+plugin_local_addr = 127.0.0.1:443
+plugin_crt_path = ./xxx.zhanghong110.top.crt
+plugin_key_path = ./xxx.zhanghong110.top.key
+plugin_host_header_rewrite = 127.0.0.1
+plugin_header_X-From-Where = frp
+```
+
+> 今天发现官方有个全配置参考[这个链接](https://github.com/fatedier/frp/blob/master/conf/frpc_full.ini#L210)
