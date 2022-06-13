@@ -2,7 +2,7 @@
 
 ## 1. gradle介绍
 
-### 1.1 gradle简介   
+### 1.1 gradle简介
 
 参考链接：https://blog.csdn.net/freekiteyu/article/details/80677361
 
