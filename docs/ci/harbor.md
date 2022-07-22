@@ -2,7 +2,7 @@
 
 > Harbor是由VMware公司开源，它包括权限管理(RBAC)、LDAP、日志审核、管理界面、自我注册、镜像复制和中文支持等功能，具有web管理功能，有了它之后能够很方便的管理容器镜像，搭配Jenkins使用很是方便。它基于docker官方提供的仓库镜像服务 `registry` 二次开发， 也是企业级镜像仓库中比较常用的解决方案之一。
 
-首先，它支持在线下载和离线下载，但是都是解压的方式，我们去官网下载个离线包
+首先，它支持在线下载和离线下载，但是都是解压的方式，我们去官网下载个离线包(我这边不知道为啥阴差阳错下的版本老了，新的下2.5之后的版本，不过流程都一样)
 
 [地址](https://github.com/goharbor/harbor/releases)
 
@@ -79,7 +79,12 @@ chmod +x /usr/local/bin/docker-compose
 Docker Compose version v2.5.1
 ```
 
-
+```sh
+#不行的话可以试下加上
+sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+#再执行
+docker-compose --version
+```
 
 前置工作做好后我们就可以回到刚才harbor的根目录执行`./install.sh`了
 
@@ -104,8 +109,6 @@ registryctl         "/home/harbor/start.…"   registryctl         running (heal
 安装结束之后，可以通过ip地址访问Harbor镜像仓库，使用默认的账号和密码（admin/密码为配置文件中自己设置的),重置密码比较麻烦，这些镜像默认的映射人间在宿主机`/data`下（可以在初始化时在`harbor.yml`中的`data_volume: /data`修改），会有影响。如果密码不对，进入PG库修改也可能不行，原因就在此。
 
 !>注意，由于docker拉取镜像默认使用https，这边为了避免以后麻烦，请尽量使用Https去安装
-
-这边如果是公司内网，可以自签名证书，可以参考[这个地址](https://blog.csdn.net/networken/article/details/107502461)配置，我这边的话用公网域名。
 
 我们在腾讯云下载 `xxx.zhanghong110.top`的nginx证书
 
@@ -162,8 +165,93 @@ docker-compose down -v
 docker-compose up -d
 ```
 
-
-
-如果想要自签名的方式配置(仅适用于公司内部)可以参考[这个链接](https://blog.csdn.net/networken/article/details/107502461)
-
 > 我们再次访问，即可https访问了。
+
+
+
+有的时候可能只是内网访问，可以生成自签名的证书[官网地址](https://goharbor.io/docs/2.0.0/install-config/configure-https/)
+
+!> 注意自签名的证书存在局限性，完成后如果需要从其他服务器登录harbor需要将证书复制到其他服务器上才可以。下面域名我们用`harbor.project.com`代替
+
+```sh
+#1.创建CA的私钥
+openssl genrsa -out ca.key 4096
+
+#2.创建CA证书
+#X.509 证书由多个字段组成。该 Subject领域是与本教程最相关的领域之一。它给出了证书所属客户端的 DName。DName 是赋予 X.500 目录对象的唯一名称。它由许多称为相对可分辨名称 (RDN) 的属性值对组成。一些最常见的RDN及其解释如下：
+#CN: 通用名
+#OU： 组织单位
+#O： 组织
+#L: 地方
+#S: 州或省名
+#C： 国家的名字
+openssl req -x509 -new -nodes -sha512 -days 3650 \
+ -subj "/C=UK/ST=Wales/L=Cardiff/O=Cardiff University/OU=Headquarter/CN=project.com" \
+ -key ca.key \
+ -out ca.crt
+ 
+#3.生成CA的私钥和证书后，需要生成Harbor的私钥和证书：
+openssl req -sha512 -new \
+    -subj "/C=UK/ST=Wales/L=Cardiff/O=Cardiff University/OU=Headquarter/CN=harbor.project.com" \
+    -key harbor.project.com.key \
+    -out harbor.project.com.csr
+    
+#4.配置x509 v3拓展文件，配置该文件的目的是帮助生成符合主题备用名称 (SAN) 和 x509 v3 的证书扩展要求的证书文件。其中，SAN 或主题备用名称是一种结构化方式，用于指示受证书保护的所有域名和 IP 地址。被视为 SAN 的项目的简短列表中包括子域和 IP 地址。该文件的格式如下：
+cat > v3.ext <<-EOF
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1=harbor.project.com
+DNS.2=harbor.project
+DNS.3=harbor
+EOF
+
+#6.配置完成后，使用该文件和openssl为Harbor生成证书：
+openssl x509 -req -sha512 -days 3650 \
+    -extfile v3.ext \
+    -CA ca.crt -CAkey ca.key -CAcreateserial \
+    -in harbor.project.com.csr \
+    -out harbor.project.com.crt
+
+#7.接下来，我们需要给Harbor容器添加证书。由于在部署容器时使用了卷映射，所以我们直接将Harbor的私钥和证书拷贝到宿主机的/data/cert目录下即可：
+cp harbor.project.com.crt /data/cert
+cp harbor.project.com.key /data/cert
+#如果目录不存在先要 mkdir /data/cert
+
+#8.完成后，转换harbor.project.com.crt为harbor.project.cert, 供 Docker 使用。Docker 守护进程将.crt文件解释为 CA 证书，将.cert文件解释为Harbor证书。
+openssl x509 -inform PEM -in harbor.project.com.crt -out harbor.project.com.cert
+
+#9.创建存放验证Harbor容器证书的Docker的目录，并将Harbor的私钥，证书，以及CA的证书拷贝进去
+mkdir -p /etc/docker/certs.d/harbor.project.com/
+cp harbor.project.com.cert /etc/docker/certs.d/harbor.project.com/
+cp harbor.project.com.key /etc/docker/certs.d/harbor.project.com/
+cp ca.crt /etc/docker/certs.d/harbor.project.com/
+
+#10.完成后，在解压后的Harbor目录下，找到如下的harbor.yml文件，并修改其中如下三处,如有需要密码也需要修改
+hostname: harbor.project.com
+
+certificate: /data/cert/harbor.project.com.crt
+private_key: /data/cert/harbor.project.com.key
+
+#11 去Harbor目录下 sudo ./install.sh即可
+
+#12 docker login harbor.project.com -u admin -p Harbor12345
+
+#13 此时，如果内网有DNS解析服务器则可以统一配置DNS解析，如果没有则登录的机器包括自生都需要修改host映射才可以
+
+#14 如果用其他服务器的docker调用会发生x509:certificate signed by unknown authority，官方解决方案https://docs.docker.com/engine/security/certificates/
+#从官方文档提示，客户端要使用tls与Harbor通信，使用的还是自签证书，那么必须建立一个目录：/etc/docker/certs.d
+#在这个目录下建立签名的域名的目录，比如域名为harbor.project.com， 那么整个目录为: /etc/docker/certs.d/harbor.project.com, 然后把harbor的证书拷贝到这个目录即可。所需要拷贝的文件包括如下几个
+#harbor.project.com.key
+#harbor.project.com.csr
+#harbor.project.com.crt
+#harbor.project.com.cert
+#拷贝完成后即可使用docker login harbor.project.com -u admin -p Harbor12345登录
+```
+
+
+

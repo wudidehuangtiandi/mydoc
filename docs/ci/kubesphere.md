@@ -1,5 +1,3 @@
-
-
 # KubeSphere 
 
 ## 一.集群的配置及安装
@@ -500,7 +498,7 @@ Pod一致性：包含次序（启动、停止次序）、网络一致性。此�
 稳定的网络：Pod的hostname模式为( s t a t e f u l s e t 名 称 ) − (statefulset名称)-(statefulset名称)−(序号)；
 稳定的存储：通过VolumeClaimTemplate为每个Pod创建一个PV。删除、减少副本，不会删除相关的卷。
 
-那么`demo-nacos-v1-0.demo-nacos.qwer123.svc.cluster.local`这玩意怎么得到的呢，我们可以祟拜你进个副本,ping下dns，dns在kuberSphere上可以看到容器集群的DNS，这样进去一Ping除了名称后缀，其它的都相同，所以这边就是`demo-nacos-v1-0.demo-nacos.qwer123.svc.cluster.local`，`demo-nacos-v1-1.demo-nacos.qwer123.svc.cluster.local` ， `demo-nacos-v1-2.demo-nacos.qwer123.svc.cluster.local`（实际配置时都要加上:8848）
+那么`demo-nacos-v1-0.demo-nacos.qwer123.svc.cluster.local`这玩意怎么得到的呢，我们可以随便进个副本,ping下dns，dns在kuberSphere上可以看到容器集群的DNS，这样进去一Ping除了名称后缀，其它的都相同，所以这边就是`demo-nacos-v1-0.demo-nacos.qwer123.svc.cluster.local`，`demo-nacos-v1-1.demo-nacos.qwer123.svc.cluster.local` ， `demo-nacos-v1-2.demo-nacos.qwer123.svc.cluster.local`（实际配置时都要加上:8848）
 
 
 
@@ -786,3 +784,76 @@ docker push 127.0.0.1:89/demo/ry-gateway:v1.0
 在检查下日志，发现运行良好。
 
 > 至此我们完成了手动部署一个微服务到KuberSphere上
+
+### 2.2.2 流水线
+
+> 下面我们学一下如何使用流水线，做到gitlab合并即发布。
+
+这个其实就是一个图形化的过程来编写`jenkinsFile`
+
+先新建一个
+
+![avatar](https://picture.zhanghong110.top/docsify/16566588807178.png)
+
+然后我们点进去之后点创建，这里也是无脑下一步即可
+
+![avatar](https://picture.zhanghong110.top/docsify/165665934330.png)
+
+我们选中编辑流水线，点中间这个
+
+![avatar](https://picture.zhanghong110.top/docsify/16566594836439.png)
+
+首先我们可以指定一个大环境，包括maven nodejs等等，但是其实不影响
+
+![avatar](https://picture.zhanghong110.top/docsify/16566601144263.png)
+
+> 下面我们进行一个模板流水线的编辑
+
+首先是项目拉取
+
+点击第一步骤，点击添加步骤
+
+![avatar](https://picture.zhanghong110.top/docsify/16566606542158.png)
+
+选择指定容器
+
+![avatar](https://picture.zhanghong110.top/docsify/16566607183323.png)
+
+!>这里虽然是输入但是不能随便写有以下[选项](https://v3-2.docs.kubesphere.io/zh/docs/devops-user-guide/how-to-use/choose-jenkins-agent/),包含了不通的内置工具，我们第一步拉取代码，选maven即可
+
+点击添加嵌套步骤
+
+![avatar](https://picture.zhanghong110.top/docsify/16566628799108.png)
+
+
+
+然后选择GIT，我们输入我们的项目地址，分支，这边凭证没有需要新建
+
+![avatar](https://picture.zhanghong110.top/docsify/1656661181209.png)
+
+我们输入账号密码，ID随便选一个，以后会保存，退出去设置分支即可
+
+![avatar](https://picture.zhanghong110.top/docsify/16566613475782.png)
+
+完了我们添加一个嵌套步骤，选择shell,加入`ls -al`命令打一下结果
+
+![avatar](https://picture.zhanghong110.top/docsify/16566624078698.png)
+
+> 测试运行下发现成功
+
+下面重复的图就不展示了，只用文字描述。
+
+我们开始第二步，项目打包
+
+这里的话有一个需要注意的地方，默认的话Maven会从中央仓库下载东西，如果需要从阿里云或者私服下载，需要用admin账户去集群管理种修改下配置文件
+
+![avatar](https://picture.zhanghong110.top/docsify/16566645394378.png)
+
+像这个样子改下即可。
+
+然后我们编辑下打包的流水线，只需要加一个shell命令即可，如下配置
+
+![avatar](https://picture.zhanghong110.top/docsify/16566715845290.png)
+
+待续
+
