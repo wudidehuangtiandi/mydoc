@@ -38,7 +38,7 @@ console.log("我在循环外"+i)
 
 ![avatar](https://picture.zhanghong110.top/docsify/16450614885234.png)
 
-ES6 之前判断字符串是否包含子串，用` indexO`f 方法，ES6 新增了子串的识别方法。
+ES6 之前判断字符串是否包含子串，用` indexOf` 方法，ES6 新增了子串的识别方法。
 
 - **includes()**：返回布尔值，判断是否找到参数字符串。
 - **startsWith()**：返回布尔值，判断参数字符串是否在原字符串的头部。
