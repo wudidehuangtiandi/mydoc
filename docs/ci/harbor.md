@@ -1,8 +1,8 @@
-# Harbor搭建
+# Harbor 搭建
 
-> Harbor是由VMware公司开源，它包括权限管理(RBAC)、LDAP、日志审核、管理界面、自我注册、镜像复制和中文支持等功能，具有web管理功能，有了它之后能够很方便的管理容器镜像，搭配Jenkins使用很是方便。它基于docker官方提供的仓库镜像服务 `registry` 二次开发， 也是企业级镜像仓库中比较常用的解决方案之一。
+> Harbor 是由 VMware 公司开源，它包括权限管理(RBAC)、LDAP、日志审核、管理界面、自我注册、镜像复制和中文支持等功能，具有 web 管理功能，有了它之后能够很方便的管理容器镜像，搭配 Jenkins 使用很是方便。它基于 docker 官方提供的仓库镜像服务 `registry` 二次开发， 也是企业级镜像仓库中比较常用的解决方案之一。
 
-首先，它支持在线下载和离线下载，但是都是解压的方式，我们去官网下载个离线包(我这边不知道为啥阴差阳错下的版本老了，新的下2.5之后的版本，不过流程都一样)
+首先，它支持在线下载和离线下载，但是都是解压的方式，我们去官网下载个离线包(我这边不知道为啥阴差阳错下的版本老了，新的下 2.5 之后的版本，不过流程都一样)
 
 [地址](https://github.com/goharbor/harbor/releases)
 
@@ -24,7 +24,7 @@
 
 我们进图目录下，修改配置文件`harbor.yml`
 
-首先要修改hostname为机器地址，使用的是http，所以https部分需要注掉。没有搭建自己的数据库，所以使用了默认的数据库，改下默认密码。部分配置文件如下。
+首先要修改 hostname 为机器地址，使用的是 http，所以 https 部分需要注掉。没有搭建自己的数据库，所以使用了默认的数据库，改下默认密码。部分配置文件如下。
 
 ```yaml
 # Configuration file of Harbor
@@ -56,13 +56,11 @@ https:
 harbor_admin_password: xxxxx #改下默认密码
 ```
 
-
-
 !>机器需要安装`docker`以及`docker-compose`。而且要对应好版本
 
-使用docker version命令查看docker版本，不清楚docker怎么下载的参见本文档docker部分，此处是`20.10.14`
+使用 docker version 命令查看 docker 版本，不清楚 docker 怎么下载的参见本文档 docker 部分，此处是`20.10.14`
 
-Harbor中依赖类似redis、mysql、pgsql等很多存储系统，所以它需要编排很多容器协同起来工作，因此VMWare Harbor在部署和使用时，需要借助于Docker的单机编排工具( Docker compose)来实现。您可以使用 YML 文件来配置应用程序需要的所有服务。然后，使用一个命令，就可以从 YML 文件配置中创建并启动所有服务。[官方地址](https://github.com/docker/compose/releases)
+Harbor 中依赖类似 redis、mysql、pgsql 等很多存储系统，所以它需要编排很多容器协同起来工作，因此 VMWare Harbor 在部署和使用时，需要借助于 Docker 的单机编排工具( Docker compose)来实现。您可以使用 YML 文件来配置应用程序需要的所有服务。然后，使用一个命令，就可以从 YML 文件配置中创建并启动所有服务。[官方地址](https://github.com/docker/compose/releases)
 
 ```sh
 sudo curl -L https://get.daocloud.io/docker/compose/releases/download/v2.5.1/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
@@ -86,16 +84,16 @@ sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 docker-compose --version
 ```
 
-前置工作做好后我们就可以回到刚才harbor的根目录执行`./install.sh`了
+前置工作做好后我们就可以回到刚才 harbor 的根目录执行`./install.sh`了
 
 经过漫长的等待,成功以后
 
 ```
 [root@centerm harbor]# docker-compose ps
 NAME                COMMAND                  SERVICE             STATUS               PORTS
-harbor-core         "/harbor/harbor_core"    core                running (healthy)    
+harbor-core         "/harbor/harbor_core"    core                running (healthy)
 harbor-db           "/docker-entrypoint.…"   postgresql          running (healthy)    5432/tcp
-harbor-jobservice   "/harbor/harbor_jobs…"   jobservice          running (starting)   
+harbor-jobservice   "/harbor/harbor_jobs…"   jobservice          running (starting)
 harbor-log          "/bin/sh -c /usr/loc…"   log                 running (healthy)    127.0.0.1:1514->10514/tcp
 harbor-portal       "nginx -g 'daemon of…"   portal              running (healthy)    8080/tcp
 nginx               "nginx -g 'daemon of…"   proxy               running (starting)   0.0.0.0:89->8080/tcp, :::89->8080/tcp
@@ -104,31 +102,29 @@ registry            "/home/harbor/entryp…"   registry            running (heal
 registryctl         "/home/harbor/start.…"   registryctl         running (healthy)
 ```
 
+安装结束之后，可以通过 ip 地址访问 Harbor 镜像仓库，使用默认的账号和密码（admin/密码为配置文件中自己设置的),重置密码比较麻烦，这些镜像默认的映射人间在宿主机`/data`下（可以在初始化时在`harbor.yml`中的`data_volume: /data`修改），会有影响。如果密码不对，进入 PG 库修改也可能不行，原因就在此。
 
+!>注意，由于 docker 拉取镜像默认使用 https，这边为了避免以后麻烦，请尽量使用 Https 去安装
 
-安装结束之后，可以通过ip地址访问Harbor镜像仓库，使用默认的账号和密码（admin/密码为配置文件中自己设置的),重置密码比较麻烦，这些镜像默认的映射人间在宿主机`/data`下（可以在初始化时在`harbor.yml`中的`data_volume: /data`修改），会有影响。如果密码不对，进入PG库修改也可能不行，原因就在此。
+我们在腾讯云下载 `xxx.zhanghong110.top`的 nginx 证书
 
-!>注意，由于docker拉取镜像默认使用https，这边为了避免以后麻烦，请尽量使用Https去安装
+进入服务器 data 路径下新建 cert 目录，然后么新建把
 
-我们在腾讯云下载 `xxx.zhanghong110.top`的nginx证书
-
-进入服务器data路径下新建cert目录，然后么新建把
-
-crt 和key结尾的两个文件复制进去，然后用以下命令解析,得到cert结尾的文件
+crt 和 key 结尾的两个文件复制进去，然后用以下命令解析,得到 cert 结尾的文件
 
 ```shell
 openssl x509 -inform PEM -in xxx.zhanghong110.top_bundle.crt -out xxx.zhanghong110.top.cert
 ```
 
-将服务器证书，密钥和CA文件复制到Harbor主机上的Docker证书文件夹中。您必须首先创建适当的文件夹
+将服务器证书，密钥和 CA 文件复制到 Harbor 主机上的 Docker 证书文件夹中。您必须首先创建适当的文件夹
 
 ```shell
 mkdir -p /etc/docker/certs.d/xxx.zhanghong110.top/
 ```
 
-然后把刚刚生成的cert结尾的文件和key结尾的文件粘进去，xxx.zhanghong110.top_bundle.crt这个也要粘进去，并且重命名把_bundle去掉
+然后把刚刚生成的 cert 结尾的文件和 key 结尾的文件粘进去，xxx.zhanghong110.top_bundle.crt 这个也要粘进去，并且重命名把\_bundle 去掉
 
-然后修改配置文件`harbor.yml`,这边crt文件记得改下名要一致。
+然后修改配置文件`harbor.yml`,这边 crt 文件记得改下名要一致。
 
 ```shell
 https:
@@ -139,41 +135,39 @@ https:
   private_key: /data/cert/xxx.zhanghong110.top.key
 ```
 
-配置文件里还有这个hostname一定要换成域名否则docker login还是会报http异常
+配置文件里还有这个 hostname 一定要换成域名否则 docker login 还是会报 http 异常
 
 ```shell
 hostname: xxx.zhanghong110.top
 ```
 
-运行prepare脚本以启用HTTPS。
-Harbor将nginx实例用作所有服务的反向代理。您可以使用prepare脚本来配置nginx为使用HTTPS。该prepare在harbor的安装包，在同级别的install.sh脚本。
+运行 prepare 脚本以启用 HTTPS。
+Harbor 将 nginx 实例用作所有服务的反向代理。您可以使用 prepare 脚本来配置 nginx 为使用 HTTPS。该 prepare 在 harbor 的安装包，在同级别的 install.sh 脚本。
 
 ```shell
 ./prepare
 ```
 
-如果Harbor正在运行，请停止并删除现有实例。
+如果 Harbor 正在运行，请停止并删除现有实例。
 您的镜像数据保留在文件系统中，因此不会丢失任何数据。
 
 ```shell
 docker-compose down -v
 ```
 
-重启harbor：
+重启 harbor：
 
 ```shell
 docker-compose up -d
 ```
 
-> 我们再次访问，即可https访问了。
-
-
+> 我们再次访问，即可 https 访问了。
 
 有的时候可能只是内网访问，可以生成自签名的证书[官网地址](https://goharbor.io/docs/2.0.0/install-config/configure-https/)
 
-!> 注意自签名的证书存在局限性，完成后如果需要从其他服务器登录harbor需要将证书复制到其他服务器上才可以。下面域名我们用`harbor.project.com`代替
+!> 注意自签名的证书存在局限性，完成后如果需要从其他服务器登录 harbor 需要将证书复制到其他服务器上才可以。下面域名我们用`harbor.project.com`代替
 
-```sh
+```shell
 #1.创建CA的私钥
 openssl genrsa -out ca.key 4096
 
@@ -189,13 +183,13 @@ openssl req -x509 -new -nodes -sha512 -days 3650 \
  -subj "/C=UK/ST=Wales/L=Cardiff/O=Cardiff University/OU=Headquarter/CN=project.com" \
  -key ca.key \
  -out ca.crt
- 
+
 #3.生成CA的私钥和证书后，需要生成Harbor的私钥和证书：
 openssl req -sha512 -new \
     -subj "/C=UK/ST=Wales/L=Cardiff/O=Cardiff University/OU=Headquarter/CN=harbor.project.com" \
     -key harbor.project.com.key \
     -out harbor.project.com.csr
-    
+
 #4.配置x509 v3拓展文件，配置该文件的目的是帮助生成符合主题备用名称 (SAN) 和 x509 v3 的证书扩展要求的证书文件。其中，SAN 或主题备用名称是一种结构化方式，用于指示受证书保护的所有域名和 IP 地址。被视为 SAN 的项目的简短列表中包括子域和 IP 地址。该文件的格式如下：
 cat > v3.ext <<-EOF
 authorityKeyIdentifier=keyid,issuer
@@ -252,6 +246,3 @@ private_key: /data/cert/harbor.project.com.key
 #harbor.project.com.cert
 #拷贝完成后即可使用docker login harbor.project.com -u admin -p Harbor12345登录
 ```
-
-
-
