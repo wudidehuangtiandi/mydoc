@@ -528,6 +528,17 @@ CMD tail -f 1.txt
 ```shell
 #表示在当前目录下构建镜像，名字为test
 docker build -t test .
+
+#docker build的一些其他参数
+-f，--file
+#指定 dockerfile 路径
+
+docker build -f /path/to/a/Dockerfile .
+#不指定的话，默认会读取上下文路径（  .  )下的 dockerfile
+
+-t，--tag
+#指定构建的镜像名和 tag
+#docker build -t ubuntu-nginx:v1 . 
 ```
 
 

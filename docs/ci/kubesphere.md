@@ -787,9 +787,17 @@ docker push 127.0.0.1:89/demo/ry-gateway:v1.0
 
 ### 2.2.2 流水线
 
+#### 2.2.2.1 后端微服务
+
 > 下面我们学一下如何使用流水线，做到gitlab合并即发布。
 
 这个其实就是一个图形化的过程来编写`jenkinsFile`
+
+在我们开始前我们先要理解一个概念
+
+> 无论后面多少个容器，指定多少东西，最后操作完文件都会返回给同一台K8S所在的机器。就是说实际上是在同一台机器上虚拟化容器去执行脚本，完了以后都会返回给这台机器，然后再去用这些东西，在下一个容器中操作。
+
+
 
 先新建一个
 
@@ -851,9 +859,651 @@ docker push 127.0.0.1:89/demo/ry-gateway:v1.0
 
 像这个样子改下即可。
 
-然后我们编辑下打包的流水线，只需要加一个shell命令即可，如下配置
+
+
+然后我们编辑下打包的流水线，只需要加一个shell命令即可，如下配置 具体过程还是最外层选择node,maven 指定容器(名称写maven)-》添加嵌套步骤-》添加shell脚本，容器选择maven环境即可。
+
+> 打包并跳过测试 mvn clean package -Dmaven.test.skip=true
 
 ![avatar](https://picture.zhanghong110.top/docsify/16566715845290.png)
 
-待续
+打包的话需要根据自己配置的dockerfile来构建不同的镜像，以xueyi-cloud为例子
+
+```dockerfile
+# 基础镜像,改成jdk,方便以后进容器输出一些jdk才带的命令
+FROM  openjdk:8-jdk
+
+LABEL maintainer=gc
+
+#环境,使用生产环境（nacos要有）,我们使用k8s内部集群的话这边应该还要加上--spring.cloud.nacos.discovery.server-addr=service的DNS地址+端口 及--spring.cloud.nacos.config.server-add=service的DNS地址+端口。
+ENV PARAMS="--server.port=8080 --spring.profiles.active=prod"
+
+#修改镜像时区
+RUN /bin/cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo 'Asia/Shanghai' >/etc/timezone
+
+#文件复制,实际根目录只有一个jar包
+COPY target/*.jar /app.jar
+
+#所有服务统一暴露8080,pod ip不同
+EXPOSE 8080
+
+#启动脚本，要包含环境变量params,-Djava.security.edg=file:/dev/./urandom这个是固定值用于防止启动时阻塞。
+ENTRYPOINT ["/bin/sh","-c","java -Djava.security.edg=file:/test/./urandom -jar app.jar ${PARAMS}"]
+```
+
+
+
+至此就编译完成了，我们下面应该做流水线的第三步，构建镜像，我们先还是指定最外层为node,maven,然后指定容器，命名为maven。然后添加shell脚本，添加嵌套步骤,脚本如下
+
+```shell
+# -t为镜像tag -f为dockerfile路径 最后一项为工作目录
+docker build -t aoyang-order:latest -f aoyang-modules/aoyang-order/Dockerfile aoyang-modules/aoyang-order/ 
+```
+
+好了以后添加并行阶段，把所有服务都按照这样一样打包即可。
+
+![avatar](https://picture.zhanghong110.top/docsify/16593342309711.png)
+
+ 
+
+!>这边通过研究同事的文件发现，最外层也可直接用none 无所谓
+
+
+
+ 然后我们进入下一步，推送镜像，即把打包的镜像推送到镜像仓库，我们用私有的harbor作为演示，这边的脚本需要做一些动态取值，包括以下两个脚本
+
+```shell
+#给tag重命名,规则为仓库地址（域名或者IP）+仓库内命名空间+镜像名（重命名加上第几次构建）
+docker tag aoyang-order:latest $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-order:SNAPSHOT-$SNAPSHOT_NUM
+#推送刚才那个镜像
+docker push  $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-order:SNAPSHOT-$SNAPSHOT_NUM
+```
+
+然后我们去kubesphere操作下，方式还是一样的，指定容器，添加嵌套步骤，添加shell脚本（里面放上面这两个命令），再添加嵌套步骤，增加一个凭证。凭证要注意下，我们分别将账号密码字段声明成以下变量，这样凭证密码变更后推送不会被影响到。
+
+```shell
+DOCKER_PWD_VAR
+DOCKER_USER_VAR
+```
+
+![avatar](https://picture.zhanghong110.top/docsify/16593384973523.png)
+
+!>注意到这里我们会发现凭证是嵌套在shell脚本中的，此时其实我们需要这些步骤都在凭证下执行，因此我们可以改下jenkinsfile的步骤。将shell脚本放到凭证下。
+
+然后这边还少一个步骤，即docker login步骤。我们需要在shell脚本中加入以下命令，啥意思呢，就是将密码输出到登录命令后的输入的地方。
+
+```shell
+echo "$DOCKER_PWD_VAR" | docker login $REGISTRY -u "$DOCKER_USER_VAR" --password-stdin
+```
+
+!>要以非交互方式运行docker login命令,可以将--*password- stdin*标志设置为通过STDIN提供密码。使用STDIN可以防止密码出现在shell的历史记录或日志文件中。
+
+最后如下
+
+![avatar](https://picture.zhanghong110.top/docsify/16593403596622.png)
+
+完事了添加并行步骤,把所有模块都搞进去。
+
+下面部署到测试环境。
+
+> 首先我们要为每个服务准备一个deploy.yaml
+
+我们还是空的流程步骤，然后不选指定容器了，添加步骤中选择`kubernetesDeploy`，然后创建凭证（这玩意用来授权给别的Node k8s的权限，等同于手动部署中的复制token到其它服务器）
+
+![avatar](https://picture.zhanghong110.top/docsify/16593418898791.png)
+
+每个模块都需要一个`deploy.yaml`，这边给出一个例子，具体参考`K8S`文档
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: aoyang-order
+  name: aoyang-order
+  namespace: lrzx-dev   #一定要写名称空间
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aoyang-order
+  strategy:
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 50%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: aoyang-order
+    spec:
+      imagePullSecrets:
+        - name: aoyang-harbor  #这个就是密钥的名字，需要提前在项目下配置账号密码（用以拉镜像）
+      containers:
+        - image: $REGISTRY/$ALIYUNHUB_NAMESPACE/aoyang-order:SNAPSHOT-$SNAPSHOT_NUM
+ # 去掉就绪探针      
+ #         readinessProbe:
+ #             httpGet:
+ #               path: /actuator/health
+ #               port: 8080
+ #             timeoutSeconds: 10
+ #             failureThreshold: 30
+ #             periodSeconds: 5
+ #
+          imagePullPolicy: Always
+          name: app
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 300m
+              memory: 400Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: aoyang-order
+  name: aoyang-order
+  namespace: lrzx-dev
+spec:
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: aoyang-order
+  sessionAffinity: None
+  type: ClusterIP
+```
+
+配置文件路径填`aoyang-modules/aoyang-order/deploy/**`即可,不同的包路径自行匹配。列子中的`deploy/deploy.yaml`位于各个模块`src`同级目录下
+
+完事了添加并行即可
+
+到这里就结束了，我们来看下最后的样子
+
+![avatar](https://picture.zhanghong110.top/docsify/16593445745832.png)
+
+
+
+最后给出一个生成的`jenkins.file`,可做参考。
+
+```
+pipeline {
+  agent {
+    node {
+      label 'maven'
+    }
+
+  }
+  stages {
+    stage('拉取代码') {
+      agent none
+      steps {
+        container('maven') {
+          git(url: 'http://172.23.112.16/gechao/lrzx-cloud.git', credentialsId: 'gitlab-yph', branch: 'online', changelog: true, poll: false)
+          sh 'ls -al'
+        }
+
+      }
+    }
+
+    stage('项目编译') {
+      agent none
+      steps {
+        container('maven') {
+          sh 'mvn clean package -Dmaven.test.skip=true'
+        }
+
+      }
+    }
+
+    stage('default-2') {
+      parallel {
+        stage('构建aoyang-basedata') {
+          agent none
+          steps {
+            container('maven') {
+              sh ''
+              sh 'docker build -t aoyang-basedata:latest -f aoyang-modules/aoyang-basedata/Dockerfile aoyang-modules/aoyang-basedata/'
+            }
+
+          }
+        }
+
+        stage('构建aoyang-wx-miniapp') {
+          agent none
+          steps {
+            container('maven') {
+              sh ''
+              sh 'docker build -t aoyang-wx-miniapp:latest -f aoyang-modules/aoyang-wx-miniapp/Dockerfile aoyang-modules/aoyang-wx-miniapp/'
+            }
+
+          }
+        }
+
+        stage('构建aoyang-order') {
+          agent none
+          steps {
+            container('maven') {
+              sh ''
+              sh 'docker build -t aoyang-order:latest -f aoyang-modules/aoyang-order/Dockerfile aoyang-modules/aoyang-order/'
+            }
+
+          }
+        }
+
+        stage('构建aoyang-itsm') {
+          agent none
+          steps {
+            container('maven') {
+              sh ''
+              sh 'docker build -t aoyang-itsm:latest -f aoyang-modules/aoyang-itsm/Dockerfile aoyang-modules/aoyang-itsm/'
+            }
+
+          }
+        }
+
+      }
+    }
+
+    stage('default-3') {
+      parallel {
+        stage('推送aoyang-basedata镜像') {
+          agent none
+          steps {
+            container('maven') {
+              withCredentials([usernamePassword(credentialsId : 'harbor-yph' ,passwordVariable : 'DOCKER_PWD_VAR' ,usernameVariable : 'DOCKER_USER_VAR' ,)]) {
+                sh 'echo "$DOCKER_PWD_VAR" | docker login $REGISTRY -u "$DOCKER_USER_VAR" --password-stdin'
+                sh 'docker tag aoyang-basedata:latest $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-basedata:SNAPSHOT-$SNAPSHOT_NUM'
+                sh 'docker push  $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-basedata:SNAPSHOT-$SNAPSHOT_NUM'
+                sh 'docker '
+              }
+
+            }
+
+          }
+        }
+
+        stage('推送aoyang-wx-miniapp镜像') {
+          agent none
+          steps {
+            container('maven') {
+              withCredentials([usernamePassword(credentialsId : 'harbor-yph' ,passwordVariable : 'DOCKER_PWD_VAR' ,usernameVariable : 'DOCKER_USER_VAR' ,)]) {
+                sh 'echo "$DOCKER_PWD_VAR" | docker login $REGISTRY -u "$DOCKER_USER_VAR" --password-stdin'
+                sh 'docker tag aoyang-wx-miniapp:latest $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-wx-miniapp:SNAPSHOT-$SNAPSHOT_NUM'
+                sh 'docker push  $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-wx-miniapp:SNAPSHOT-$SNAPSHOT_NUM'
+              }
+
+            }
+
+          }
+        }
+
+        stage('推送aoyang-order镜像') {
+          agent none
+          steps {
+            container('maven') {
+              withCredentials([usernamePassword(credentialsId : 'harbor-yph' ,passwordVariable : 'DOCKER_PWD_VAR' ,usernameVariable : 'DOCKER_USER_VAR' ,)]) {
+                sh 'echo "$DOCKER_PWD_VAR" | docker login $REGISTRY -u "$DOCKER_USER_VAR" --password-stdin'
+                sh 'docker tag aoyang-order:latest $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-order:SNAPSHOT-$SNAPSHOT_NUM'
+                sh 'docker push  $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-order:SNAPSHOT-$SNAPSHOT_NUM'
+              }
+            }
+          }
+        }
+
+        stage('推送aoyang-itsm镜像') {
+          agent none
+          steps {
+            container('maven') {
+              withCredentials([usernamePassword(credentialsId : 'harbor-yph' ,passwordVariable : 'DOCKER_PWD_VAR' ,usernameVariable : 'DOCKER_USER_VAR' ,)]) {
+                sh 'echo "$DOCKER_PWD_VAR" | docker login $REGISTRY -u "$DOCKER_USER_VAR" --password-stdin'
+                sh 'docker tag aoyang-itsm:latest $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-itsm:SNAPSHOT-$SNAPSHOT_NUM'
+                sh 'docker push  $REGISTRY/$DOCKERHUB_NAMESPACE/aoyang-itsm:SNAPSHOT-$SNAPSHOT_NUM'
+              }
+            }
+          }
+        }
+      }
+    }
+
+    stage('default-4') {
+      parallel {
+        stage('aoyang-basedata部署到测试环境') {
+          agent none
+          steps {
+            kubernetesDeploy(configs: 'aoyang-modules/aoyang-basedata/deploy/**', enableConfigSubstitution: true, kubeconfigId: "$KUBECONFIG_CREDENTIAL_ID")
+          }
+        }
+
+        stage('aoyang-wx-miniapp部署到测试环境') {
+          agent none
+          steps {
+            kubernetesDeploy(configs: 'aoyang-modules/aoyang-wx-miniapp/deploy/**', enableConfigSubstitution: true, kubeconfigId: "$KUBECONFIG_CREDENTIAL_ID")
+          }
+        }
+
+        stage('aoyang-order部署到测试环境') {
+          agent none
+          steps {
+            kubernetesDeploy(configs: 'aoyang-modules/aoyang-order/deploy/**', enableConfigSubstitution: true, kubeconfigId: "$KUBECONFIG_CREDENTIAL_ID")
+          }
+        }
+
+        stage('aoyang-itsm部署到测试环境') {
+          agent none
+          steps {
+            kubernetesDeploy(configs: 'aoyang-modules/aoyang-itsm/deploy/**', enableConfigSubstitution: true, kubeconfigId: "$KUBECONFIG_CREDENTIAL_ID")
+          }
+        }
+
+      }
+    }
+
+    stage('部署到生产环境') {
+      agent none
+      steps {
+        input(id: 'deploy-to-production', message: 'deploy to production?')
+        kubernetesDeploy(configs: 'deploy/prod-ol/**', enableConfigSubstitution: true, kubeconfigId: "$KUBECONFIG_CREDENTIAL_ID")
+      }
+    }
+
+  }
+  environment {
+    DOCKER_CREDENTIAL_ID = 'dockerhub-id'
+    GITHUB_CREDENTIAL_ID = 'github-id'
+    KUBECONFIG_CREDENTIAL_ID = 'harbor-config'
+    REGISTRY = '192.168.169.113:8001'
+    DOCKERHUB_NAMESPACE = 'lrzx-cloud'
+    GITHUB_ACCOUNT = 'kubesphere'
+    APP_NAME = 'devops-java-sample'
+    ALIYUNHUB_NAMESPACE = 'lrzx-cloud'
+    SNAPSHOT_NUM = '2'
+  }
+  parameters {
+    string(name: 'TAG_NAME', defaultValue: '', description: '')
+  }
+}
+```
+
+#### 2.2.2.2 前端
+
+前端的部署略有不同,下面一些重复的步骤我们用截图加解释的方式
+
+第一步，拉取代码，注意容器使用nodejs
+
+![avatar](https://picture.zhanghong110.top/docsify/16593521056720.png)
+
+
+
+第二部项目编译，注意要指定淘宝镜像及打生产环境的包
+
+![avatar](https://picture.zhanghong110.top/docsify/16593523272184.png)
+
+
+
+第三步构建镜像
+
+![avatar](https://picture.zhanghong110.top/docsify/16593524253395.png)
+
+这步需要`dockerfile`,给个实例,这个实例中可以看到还需要指定nginx的配置文件
+
+```dockerfile
+# 基础镜像
+FROM nginx
+# author
+MAINTAINER yphyyy
+
+# 挂载目录
+#VOLUME /home/lrzx/projects/lrzx-ui
+# 创建目录
+#RUN mkdir -p /home/lrzx/projects/lrzx-ui
+# 指定路径
+# WORKDIR /home/lrzx/projects/lrzx-ui
+# 复制conf文件到路径
+COPY nginx/conf/nginx.conf /etc/nginx/nginx.conf
+# 复制html文件到路径
+
+COPY dist /usr/share/nginx/html/
+
+EXPOSE 80
+```
+
+根据dockerfile,我们在dist通缉目录下建`nginx/conf/nginx.conf`,内容如下
+
+```
+worker_processes  1;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+
+    server {
+        listen       80;
+        server_name  _;
+		    charset utf-8;
+
+        location / {
+            root   /usr/share/nginx/html;
+            try_files $uri $uri/ /index.html;
+            index  index.html index.htm;
+        }
+
+        location /prod-api/ {
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header REMOTE-HOST $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_pass http://aoyang-gateway.lrzx-dev:8080/;
+        }
+
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   html;
+        }
+    }
+}
+```
+
+
+
+下一步，推送镜像，这个和后端一样，还是添加私服凭证，登录镜像仓库，然后给镜像打标签，然后推送给私服
+
+![avatar](https://picture.zhanghong110.top/docsify/16593527059521.png)
+
+我们贴一下具体的脚本
+
+```shell
+echo "$DOCKER_PWD_VAR" | docker login $REGISTRY -u "$DOCKER_USER_VAR" --password-stdin
+
+docker tag lrzx-ui:latest $REGISTRY/$DOCKERHUB_NAMESPACE/lrzx-ui:SNAPSHOT-$BUILD_NUM
+
+docker push  $REGISTRY/$DOCKERHUB_NAMESPACE/lrzx-ui:SNAPSHOT-$BUILD_NUM
+```
+
+最后一步，部署到测试环境
+
+![avatar](https://picture.zhanghong110.top/docsify/16593528975833.png)
+
+这里又需要`deploy.yaml`我们还是在`dist`同级增加`deploy/deploy.yaml`,我们同样给出一个例子
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: lrzx-ui
+  name: lrzx-ui
+  namespace: lrzx-dev   #一定要写名称空间
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lrzx-ui
+  strategy:
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 50%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: lrzx-ui
+    spec:
+      imagePullSecrets:
+        - name: aoyang-harbor  #提前在项目下配置访问阿里云的账号密码
+      containers:
+        - image: $REGISTRY/$ALIYUNHUB_NAMESPACE/lrzx-ui:SNAPSHOT-$BUILD_NUM
+ #         readinessProbe:
+ #             httpGet:
+ #               path: /actuator/health
+ #               port: 8080
+ #             timeoutSeconds: 10
+ #             failureThreshold: 30
+ #             periodSeconds: 5
+ #
+          imagePullPolicy: Always
+          name: app
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 300m
+              memory: 400Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: lrzx-ui
+  name: lrzx-ui
+  namespace: lrzx-dev
+spec:
+  ports:
+    - name: http
+      port: 30446
+      nodePort: 30446
+      protocol: TCP
+      targetPort: 80
+  selector:
+    app: lrzx-ui
+#  sessionAffinity: None
+  type: NodePort
+```
+
+至此前端也可以了，下面我们给出一个生成好的`jenkinsfile`
+
+```
+pipeline {
+  agent {
+    node {
+      label 'nodejs'
+    }
+
+  }
+  stages {
+    stage('拉取代码测试') {
+      agent none
+      steps {
+        container('nodejs') {
+          git(url: 'http://172.23.112.16/gechao/lrzx-ui.git', credentialsId: 'gitlab-yph', branch: 'online', changelog: true, poll: false)
+          sh 'ls -al'
+        }
+
+      }
+    }
+
+    stage('项目编译') {
+      agent none
+      steps {
+        container('nodejs') {
+          sh 'npm install --registry=https://registry.npm.taobao.org'
+          sh 'npm run build:prod'
+          sh 'ls'
+        }
+
+      }
+    }
+
+    stage('构建镜像') {
+      agent none
+      steps {
+        container('nodejs') {
+          sh 'ls dist/'
+          sh 'docker build -t lrzx-ui:latest -f Dockerfile .'
+        }
+
+      }
+    }
+
+    stage('推送镜像') {
+      agent none
+      steps {
+        container('nodejs') {
+          withCredentials([usernamePassword(credentialsId : 'harbor-yph' ,usernameVariable : 'DOCKER_USER_VAR' ,passwordVariable : 'DOCKER_PWD_VAR' ,)]) {
+            sh 'echo "$DOCKER_PWD_VAR" | docker login $REGISTRY -u "$DOCKER_USER_VAR" --password-stdin'
+            sh 'docker tag lrzx-ui:latest $REGISTRY/$DOCKERHUB_NAMESPACE/lrzx-ui:SNAPSHOT-$BUILD_NUM'
+            sh 'docker push  $REGISTRY/$DOCKERHUB_NAMESPACE/lrzx-ui:SNAPSHOT-$BUILD_NUM'
+          }
+
+        }
+
+      }
+    }
+
+    stage('lrzx-ui部署到测试环境') {
+      agent none
+      steps {
+        kubernetesDeploy(configs: 'deploy/**', enableConfigSubstitution: true, kubeconfigId: "$KUBECONFIG_CREDENTIAL_ID")
+      }
+    }
+
+    stage('部署到生产环境') {
+      agent none
+      steps {
+        input(id: 'deploy-to-production', message: 'deploy to production?')
+        kubernetesDeploy(configs: 'deploy/prod-ol/**', enableConfigSubstitution: true, kubeconfigId: "$KUBECONFIG_CREDENTIAL_ID")
+      }
+    }
+
+  }
+  environment {
+    DOCKER_CREDENTIAL_ID = 'dockerhub-id'
+    GITHUB_CREDENTIAL_ID = 'github-id'
+    KUBECONFIG_CREDENTIAL_ID = 'harbor-config'
+    REGISTRY = '192.168.169.113:8001'
+    DOCKERHUB_NAMESPACE = 'lrzx-ui'
+    GITHUB_ACCOUNT = 'kubesphere'
+    APP_NAME = 'devops-java-sample'
+    ALIYUNHUB_NAMESPACE = 'lrzx-ui'
+    BUILD_NUM = '2'
+  }
+  parameters {
+    string(name: 'TAG_NAME', defaultValue: '', description: '')
+  }
+}
+```
 
