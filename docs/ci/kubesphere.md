@@ -996,6 +996,7 @@ spec:
           ports:
             - containerPort: 8080
               protocol: TCP
+ # 注意这步可能会导致服务响应速度问题             
           resources:
             limits:
               cpu: 300m
