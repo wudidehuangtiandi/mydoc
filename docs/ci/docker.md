@@ -68,8 +68,8 @@ sudo docker run hello-world
 sudo systemctl stop docker 
 复制到指定路径
 cp -R /var/lib/docker/* /home/docker/lib/docker
-修改配置文件
-etc /systemd/system/docker.service.d/docker-options.conf
+修改配置文件(没有则创建)
+etc/systemd/system/docker.service.d/docker-options.conf
 增加以下内容
 ExecStart=/usr/bin/dockerd  --graph=/home/docker/lib/docker
 启动docker服务
