@@ -221,7 +221,7 @@ docker run --name nginx --privileged -it -p 80:80 -v /data/nginx/conf/nginx.conf
 ##在html文件夹解压我们上传的dist文件
 unzip dist.zip
 
-##重启Jenkins
+##重启nginx
 docker restart b0ba
 
 #注意，这时候配置文件虽然映射出来了但是路径依然是需要配置容器路径才能正常映射。
