@@ -203,8 +203,8 @@ mkdir -p /data/nginx/conf.d
 docker run --name test -d nginx
 
 ##复制配置文件
-docker cp test:/etc/nginx/nginx.conf /data/docker/nginx/conf/
-docker cp test:/etc/nginx/conf.d/default.conf  /data/docker/nginx/conf.d
+docker cp test:/etc/nginx/nginx.conf /data/nginx/conf/
+docker cp test:/etc/nginx/conf.d/default.conf  /data/nginx/conf.d
 
 ##如果不知道配置文件在docker里面的目录位置,可以进去看一下
 docker exec -it test /bin/bash
