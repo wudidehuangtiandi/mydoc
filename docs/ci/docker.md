@@ -284,7 +284,7 @@ docker run -p 3306:3306 --name mysql \
 4.redis
 
 ```shell
-redis 注意配置文件默认为空，需要去官网搞一个 。注意，用配置文件需要修改三处保护模式(protected-mode)修改为no。
+redis 注意配置文件默认为空，需要去[地址](https://github.com/redis/redis/blob/unstable/redis.conf)搞一个 。注意，用配置文件需要修改三处保护模式(protected-mode)修改为no。
 把密码这行的注释解掉，修改为自己的密码 requirepass xxx 。 把bind 127.0.0.1注释掉。
 
 docker run -p 6379:6379 --name redis -v /home/redis/data:/data \

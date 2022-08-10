@@ -26,7 +26,7 @@ redis版本为6.2.6
 
 4.在redis.conf文件夹内建立配置文件redis.conf
 
-> 原始的配置文件，可以去官网搞一个，不同时期版本应该不同
+> 原始的配置文件,[地址](https://github.com/redis/redis/blob/unstable/redis.conf)注意不同版本区别
 
 在继续之前，我们先介绍一下文件中 Redis Cluster 引入的配置参数`redis.conf`。有些会很明显，有些会随着您继续阅读而变得更加清晰。
 
