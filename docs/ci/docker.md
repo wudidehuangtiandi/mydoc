@@ -288,41 +288,9 @@ docker run -p 3306:3306 --name mysql \
 适配mysql8
 
 ```
-#Mysql服务的唯一编号 每个mysql服务Id需唯一
-server-id = 1
-
+[mysqld]
 #服务端口号 默认3306
 port = 3306
-
-#mysql安装根目录
-#basedir = /usr/local/mysql
-
-#mysql数据文件所在位置
-#datadir = /usr/local/mysql/data
-
-#pid
-#pid-file = /usr/local/mysql/mysql.pid
-
-#设置socke文件所在目录
-#socket = /tmp/mysql.sock
-
-#设置临时目录
-#tmpdir = /tmp
-
-# 用户
-#user = mysql
-
-# 允许访问的IP网段
-bind-address = 0.0.0.0
-
-# 跳过密码登录
-#skip-grant-tables
-
-#主要用于MyISAM存储引擎,如果多台服务器连接一个数据库则建议注释下面内容
-#skip-external-locking
-
-#只能用IP地址检查客户端的登录，不用主机名
-#skip_name_resolve = 1
 
 #事务隔离级别，默认为可重复读，mysql默认可重复读级别（此级别下可能参数很多间隙锁，影响性能）
 #transaction_isolation = READ-COMMITTED
