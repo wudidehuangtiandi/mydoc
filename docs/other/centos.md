@@ -161,6 +161,13 @@ su xxxx
 #查看CPU信息
 more /proc/cpuinfo
 
+#查看硬件温度
+#安装插件
+yum -y install lm_sensors
+#传感器检测全部yes
+sensors-detect
+#查看温度
+sensors
 ```
 
 待续
