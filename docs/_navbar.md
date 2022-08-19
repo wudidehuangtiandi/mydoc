@@ -11,6 +11,7 @@
 * 前端
   * [es6](/javascript/es6)
   * [ts](/javascript/ts)
+  * [前端布局](/javascript/bj)
 
 * 中间件
   * [redis](/mw/redis)
