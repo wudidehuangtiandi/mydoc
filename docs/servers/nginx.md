@@ -340,3 +340,79 @@ nginx日志错误日志说明
 
 
 !>这边讲一个实际生产环境时遇到的一个问题，请求通过单位DMZ区的NGINX后转发到内网服务器，并发高的时候DMZ区的NGINX报`upstream timed out (110: Connection timed out) while connecting to upstream`，经过排查发现并发高的时候ping 延迟会突破200ms导致。这个问题暂时还在排查中。目前情况，单独压测内网服务器和dmz区服务器都能够承受8000+的并发。
+
+# NGINX设置简单密码及浏览器判断
+
+> nginx可以设置简单的密码以供访问时做一定的限制
+
+1.我们需要装个插件生成个密码文件。我们这采用`httpd-tools`插件来完成
+
+第一步，安装插件
+
+```shell
+yum -y install httpd-tools
+```
+
+2.第二部，利用该插件生成一个密码文件,第一个参数为文件名（不写具体默认是当前路径下），第二个参数为密码文件，需要以.db结尾
+
+```shell
+htpasswd -c xxxx xxxx
+```
+
+3.配置nginx
+
+```shell
+        location /jl {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+            auth_basic "请输入验证信息"; #这里是验证时的提示信息,只有部分浏览器支持 
+       	    auth_basic_user_file /etc/nginx/conf.d/jl.db; #刚才生成的第二个参数里的账号密码
+        }
+```
+
+# NGINX判断不同的来源并分发到不同页面
+
+> 有时我们有这种需求,这边贴一个完整的nginx配置，然后讲解下
+
+```
+server {
+        listen       80;
+        server_name  td;
+
+        #先定义一个变量 赋值为空
+
+        set $flag 0;
+
+        #用 http_user_agent 判断是否微信浏览器访问
+
+        if ($http_user_agent ~ "MicroMessenger|^$" ){
+
+            set $flag "${flag}1";
+
+        }
+
+        location /jl {
+             if ($flag = "01"){
+                rewrite ^/ /jlwxfw/index.html;
+             }
+
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+            auth_basic "请输入验证信息"; #这里是验证时的提示信息 
+       	    auth_basic_user_file /etc/nginx/conf.d/jl.db;
+
+        }
+
+        location /jlwxfw {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+        }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+}
+```
+
+这个场景为判断腾讯微信的浏览器，如果是，则转发到`/jlwxfw/index.html`这个路径下然后我们监听下这个路径，配另一个页面即可。这里有个if判断，可以参考下。
