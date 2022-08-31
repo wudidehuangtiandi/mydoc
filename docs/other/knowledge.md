@@ -1,8 +1,8 @@
-# 知识概念整理
+# 概念整理
 
-# 1.java基础
 
-> 抽象类和接口的区别
+
+# 一 抽象类和接口的区别
 
 1.最大的区别就是使用场景不同，抽象类用于抽象一种具体的事物，即对类抽象，而接口是对行为的抽象。
 
@@ -14,7 +14,7 @@
 
 
 
-> java中的异常分类及常见异常
+# 二 异常分类及常见异常
 
 所有异常都是`Throwable`的子类，下面分为`Error`和`Exception`。
 
@@ -34,7 +34,7 @@
 
 
 
->JAVA集合
+# 三 JAVA集合
 
 分为`Collection`和`Map`的两种体系。这边讲讲太麻烦，贴个图，以下分析都是基于JDK1.8
 
@@ -72,7 +72,7 @@
 对于添加和删除操作add和remove，LinkedList是更快的。因为LinkedList不像ArrayList一样，不需要改变数组的大小，也不需要在数组装满的时候要将所有的数据重新装入一个新的数组，这是ArrayList最坏的一种情况，时间复杂度是O(n)，而LinkedList中插入或删除的时间复杂度仅为O(1)。ArrayList在插入数据时还需要更新索引（除了插入数组的尾部）。 ArrayList想要在指定位置插入或删除元素时，主要耗时的是System.arraycopy动作，会移动index后面所有的元素；LinkedList主耗时的是要先通过for循环找到index，然后直接插入或删除。这就导致了两者并非一定谁快谁慢,大多数情况下LinkedList更快。
 ```
 
-​     3.`hashmap`
+​      3.`hashmap`
 
 ​       3.1 `jdk1.7`及之前是数组+链表得结构，之后是数组+链表+红黑树(节点达到阈值`TREEIFY_THRESHOLD`,默认是`8`)，当哈希冲突时将会被添加到相同节点中。
 
@@ -87,12 +87,108 @@
 奇数不行：在计算hash的时候，确定落在数组的位置的时候，计算方法是(n - 1) & hash，奇数n-1为偶数，偶数2进制的结尾都是0，经过hash值&运算后末尾都是0，那么0001，0011，0101，1001，1011，0111，1101这几个位置永远都不能存放元素了，空间浪费相当大，更糟的是这种情况中，数组可以使用的位置比数组长度小了很多，这样就会造成空间的浪费而且会增加hash冲突。
 ```
 
-....发现内容太多了。深入进去不是一时半活搞得定的，待续吧
+# 四 JDK8的特性
+
+> 函数式接口
+
+四大函数式接口
+
+```java
+1.Function 
+java.util.function
+public interface Function<T,R>表示接受一个参数并产生结果的函数。
+这是一个functional interface的功能方法是apply(Object)。
+R apply(T t)将此函数应用于给定的参数。  
+
+2.Predicate 
+也可以用来可以判断字符串是否为空
+@FunctionalInterface
+public interface Predicate<T>表示一个参数的谓词（布尔值函数）。
+这是一个functional interface的功能方法是test(Object)。
+boolean test(T t)在给定的参数上评估这个谓词。
+参数
+t - 输入参数
+结果
+true如果输入参数匹配谓词，否则为 false
+    
+3.Consumer
+public interface Consumer<T>
+表示接受单个输入参数并且不返回结果的操作。 与大多数其他功能界面不同， Consumer预计将通过副作用进行操作。
+这是一个functional interface的功能方法是accept(Object) 。
+void accept(T t)对给定的参数执行此操作。
+t - 输入参数
+
+4.Supplier
+@FunctionalInterface
+public interface Supplier<T>
+没有要求每次调用供应商时都会返回新的或不同的结果。 这是一个functional interface的功能方法是get()。
+T get()获得结果
+```
 
 
 
-​      
+> lambda表达式
+
+Lambda表达式（也称为闭包）是整个Java 8发行版中最受期待的在Java语言层面上的改变，Lambda允许把函数作为一个方法的参数（函数作为参数传递进方法中），或者把代码看成数据
+
+基本语法:
+(parameters) -> expression
+或
+(parameters) ->{ statements; }
 
 
 
-   
+> Stream 流
+
+分为`Parallel-Streams` 和`Stream `前者多线程，应该避免在需要线程环境的代码中使用。
+
+终止方法，例如`toList()`会终止流，而其它的非终止方法还是会返回一个流。
+
+
+
+> Optional
+
+可以很好的用来解决空指针异常。
+
+构造其对象可以用
+
+```
+Optional.empty()： 创建一个空的 Optional 实例
+
+Optional.of(T t)：创建一个 Optional 实例，当 t为null时抛出异常
+
+Optional.ofNullable(T t)：创建一个 Optional 实例，但当 t为null时不会抛出异常，而是返回一个空的实例
+```
+
+```
+获取：
+
+get()：获取optional实例中的对象，当optional 容器为空时报错
+
+判断：
+
+isPresent()：判断optional是否为空，如果空则返回false，否则返回true
+
+ifPresent(Consumer c)：如果optional不为空，则将optional中的对象传给Comsumer函数
+
+orElse(T other)：如果optional不为空，则返回optional中的对象；如果为null，则返回 other 这个默认值
+
+orElseGet(Supplier other)：如果optional不为空，则返回optional中的对象；如果为null，则使用Supplier函数生成默认值other
+
+orElseThrow(Supplier exception)：如果optional不为空，则返回optional中的对象；如果为null，则抛出Supplier函数生成的异常
+
+过滤：
+
+filter(Predicate p)：如果optional不为空，则执行断言函数p，如果p的结果为true，则返回原本的optional，否则返回空的optional
+
+映射：
+
+map(Function<T, U> mapper)：如果optional不为空，则将optional中的对象 t 映射成另外一个对象 u，并将 u 存放到一个新的optional容器中。
+
+flatMap(Function< T,Optional> mapper)：跟上面一样，在optional不为空的情况下，将对象t映射成另外一个optional
+
+区别：map会自动将u放到optional中，而flatMap则需要手动给u创建一个optional
+```
+
+
+
