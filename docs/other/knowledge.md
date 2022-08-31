@@ -230,3 +230,31 @@ synchronized锁升级过程：
  当线程没有获得轻量级锁时，线程会CAS自旋来获取锁，当一个线程自旋10次之后，仍然未获得锁，那么就会升级成为重量级锁。
 
  成为重量级锁之后，线程会进入阻塞队列(EntryList)，线程不再自旋获取锁，而是由CPU进行调度，线程串行执行。
+
+
+
+> lock
+
+lock锁为`jdk`层面的锁,Lock是同步非阻塞，采用的是乐观并发策略。在大量并发的时候性能更好。更加灵活
+
+`ReentrantLock`,继承lock接口,是可重入的互斥锁，虽然具有与`synchronized`相同功能，但是会比`synchronized`更加灵活（**具有更多的方法**）,其同步器`sync`继承了`AbstractQueuedSynchronizer`类即`AQS`
+
+
+
+# 六 多线程
+
+1.线程池的种类
+
+1. `newCachedThreadPool`
+2. `newFixedThreadPool`
+3. `newScheduledThreadPool`
+4. `newSingleThreadExecutor`
+
+2.线程的生命周期
+
+1. 新建、就绪、运行、阻塞(等待阻塞、同步阻塞、其他阻塞)、死亡
+
+
+
+# 七 补充
+
