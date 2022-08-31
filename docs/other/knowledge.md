@@ -256,5 +256,120 @@ lock锁为`jdk`层面的锁,Lock是同步非阻塞，采用的是乐观并发策
 
 
 
-# 七 补充
+# 七 基础补充
+
+> ==和equals的区别
+
+==比较内存地址，equals没有重写前也是比较内存地址。重写后可以比较内容等。
+
+> 两个对象的` hashCode()` 相同，则 equals() 也一定为 true，对吗？
+
+“通话”和“重地”的 hashCode() 相同，然而 equals() 则为 false，因为在散列表中，hashCode() 相等即两个键值对的哈希值相等，然而哈希值相等，并不一定能得出键值对相等。
+
+> final
+
+- final 修饰的类叫最终类，该类不能被继承。
+- final 修饰的方法不能被重写。
+- final 修饰的变量叫常量，常量必须初始化，初始化之后值就不能被修改。
+
+> Math. round(-1. 5)
+
+等于 -1，因为在数轴上取值时，中间值（0.5）向右取整，所以正 0.5 是往上取整，负 0.5 是直接舍弃
+
+> String 属于基础的数据类型吗
+
+String 不属于基础类型，基础类型有 8 种：byte、boolean、char、short、int、float、long、double，而 String 属于对象。
+
+> Java 中操作字符串都有哪些类？它们之间有什么区别？
+
+操作字符串的类有：String、StringBuffer、StringBuilder。
+
+String 和 StringBuffer、StringBuilder 的区别在于 String 声明的是不可变的对象，每次操作都会生成新的 String 对象，然后将指针指向新的 String 对象，而 StringBuffer、StringBuilder 可以在原有对象的基础上进行操作，所以在经常改变字符串内容的情况下最好不要使用 String。
+
+StringBuffer 和 StringBuilder 最大的区别在于，StringBuffer 是线程安全的，而 StringBuilder 是非线程安全的，但 StringBuilder 的性能却高于 StringBuffer，所以在单线程环境下推荐使用 StringBuilder，多线程环境下推荐使用 StringBuffer。
+
+> String str="i"与 String str=new String("i")一样吗？
+
+不一样，因为内存的分配方式不一样。String str="i"的方式，Java 虚拟机会将其分配到常量池中；而 String str=new String("i") 则会被分到堆内存中。
+
+> 如何将字符串反转
+
+使用 StringBuilder 或者 stringBuffer 的 reverse() 方法。
+
+> String 类的常用方法都有那些
+
+indexOf()：返回指定字符的索引。
+charAt()：返回指定索引处的字符。
+replace()：字符串替换。
+trim()：去除字符串两端空白。
+split()：分割字符串，返回一个分割后的字符串数组。
+getBytes()：返回字符串的 byte 类型数组。
+length()：返回字符串长度。
+toLowerCase()：将字符串转成小写字母。
+toUpperCase()：将字符串转成大写字符。
+substring()：截取字符串。
+equals()：字符串比较。
+
+> Java 中 IO 流分为几种
+
+按功能来分：输入流（input）、输出流（output）。
+
+按类型来分：字节流和字符流。
+
+字节流和字符流的区别是：字节流按 8 位传输以字节为单位输入输出数据，字符流按 16 位传输以字符为单位输入输出数据。
+
+> BIO、NIO、AIO 有什么区别？
+
+`BIO`：Block IO 同步阻塞式 IO，就是我们平常使用的传统 IO，它的特点是模式简单使用方便，并发处理能力低。
+`NIO`：Non IO 同步非阻塞 IO，是传统 IO 的升级，客户端和服务器端通过 Channel（通道）通讯，实现了多路复用。
+`AIO`：Asynchronous IO 是 NIO 的升级，也叫 NIO2，实现了异步非堵塞 IO ，异步 IO 的操作基于事件和回调机制。
+
+> Files的常用方法都有哪些？
+
+Files. exists()：检测文件路径是否存在。
+Files. createFile()：创建文件。
+Files. createDirectory()：创建文件夹。
+Files. delete()：删除一个文件或目录。
+Files. copy()：复制文件。
+Files. move()：移动文件。
+Files. size()：查看文件个数。
+Files. read()：读取文件。
+Files. write()：写入文件。
+
+> 怎么确保一个集合不能被修改？
+
+可以使用 Collections. unmodifiableCollection(Collection c) 方法来创建一个只读集合，这样改变集合的任何操作都会抛出 Java. lang. UnsupportedOperationException 异常。
+
+> 创建线程有哪几种方式？
+
+创建线程有三种方式：
+
+- 继承 Thread 重写 run 方法；
+- 实现 Runnable 接口；
+- 实现 Callable 接口。
+
+> 说一下 runnable 和 callable 有什么区别？
+
+runnable 没有返回值，callable 可以拿到有返回值，callable 可以看作是 runnable 的补充。
+
+> sleep() 和 wait() 有什么区别？
+
+- 类的不同：sleep() 来自 Thread，wait() 来自 Object。
+- 释放锁：sleep() 不释放锁；wait() 释放锁。
+- 用法不同：sleep() 时间到会自动恢复；wait() 可以使用 notify()/notifyAll()直接唤醒。
+
+> notify()和 notifyAll()有什么区别？
+
+notifyAll()会唤醒所有的线程，notify()之后唤醒一个线程。notifyAll() 调用后，会将全部线程由等待池移到锁池，然后参与锁的竞争，竞争成功则继续执行，如果不成功则留在锁池等待锁被释放后再次参与竞争。而 notify()只会唤醒一个线程，具体唤醒哪一个线程由虚拟机控制。
+
+> 线程的 run() 和 start() 有什么区别？
+
+start() 方法用于启动线程，run() 方法用于执行线程的运行时代码。run() 可以重复调用，而 start() 只能调用一次。
+
+> 线程池中 submit() 和 execute() 方法有什么区别？
+
+- execute()：只能执行 Runnable 类型的任务。
+- submit()：可以执行 Runnable 和 Callable 类型的任务。
+
+Callable 类型的任务可以获取执行的返回值，而 Runnable 执行无返回值。
 
