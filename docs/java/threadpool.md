@@ -2,7 +2,7 @@
 
 *`Executors`*创建线程池的方法，创建出来的线程池都实现了`ExecutorService`接口。常用方法有以下几个：
 
-```
+```java
   1.      ExecutorService executorService1 = Executors.newSingleThreadExecutor();
   2.      ExecutorService executorService2 = Executors.newCachedThreadPool();
   3.      ExecutorService executorService3 = Executors.newFixedThreadPool(2);
@@ -19,7 +19,7 @@
 
 看一下它两的实现
 
-```
+```java
 
    newSingleThreadExecutor：
   
@@ -52,7 +52,7 @@ Java中的阻塞队列`BlockingQueue`主要有两种实现，分别是`ArrayBloc
 
 这边调用它两的无参构造我们看一下
 
-```
+```java
     /**
      * Creates a {@code LinkedBlockingQueue} with a capacity of
      * {@link Integer#MAX_VALUE}.
@@ -75,13 +75,13 @@ Java中的阻塞队列`BlockingQueue`主要有两种实现，分别是`ArrayBloc
     }
 ```
 
-可以看到不设置长度的话默认长度是`Integer.MAX_VALUE`,问题就出在这，`newFixedThreadPool`中创建`LinkedBlockingQueue`时，并未指定容量。此时，`LinkedBlockingQueue`就是一个无边界队列，对于一个无边界队列来说，是可以不断的向队列中加入任务的，这种情况下, 理论上可以无限添加任务到线程池,就有可能因为任务过多而导致内存溢出问题。
+可以看到不设置长度的话默认长度是`Integer.MAX_VALUE`,问题就出在这，`newFixedThreadPool`中创建`LinkedBlockingQueue`时，并未指定容量。此时，`LinkedBlockingQueue`就是一个无边界队列，对于一个无边界队列来说，是可以不断的向队列中加入任务的，这种情况下, 理论上可以无限添加任务到线程池,如果超过核心线程的数量，将会放入队列中。就有可能因为单个任务执行时间过长导致任务堆积过多而导致内存溢出问题。
 
 
 
 > 下一个我们来看`newScheduledThreadPool`。这个通常用来执行定时的任务。
 
-```
+```java
 public ScheduledThreadPoolExecutor(int corePoolSize) {
         super(corePoolSize, Integer.MAX_VALUE,
               DEFAULT_KEEPALIVE_MILLIS, MILLISECONDS,
@@ -93,7 +93,7 @@ public ScheduledThreadPoolExecutor(int corePoolSize) {
 
 可以看到使用了`DelayedWorkQueue`,我们瞅一眼它的grow方法
 
-```
+```java
 // 数组的初始容量为16 设置为16的原因跟hashmap中数组容量为16的原因一样
 private static final int INITIAL_CAPACITY = 16;
 // 用于记录RunableScheduledFuture任务的数组
@@ -127,7 +127,7 @@ private final Condition available = lock.newCondition();
 
 老规矩看一下实现
 
-```
+```java
 public static ExecutorService newCachedThreadPool() {
         return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
                                       60L, TimeUnit.SECONDS,
@@ -139,7 +139,7 @@ public static ExecutorService newCachedThreadPool() {
 
 
 
-*总结一下的话就是`newSingleThreadExecutor`和`newFixedThreadPool`的阻塞队列为极限是`Integer.MAX_VALUE`的有界阻塞队列，当任务量过大时可能会导致内存溢出。`newScheduledThreadPool`允许的创建最大线程数量为`Integer.MAX_VALUE`，且延迟队列中的数组支持动态扩容 单个任务时间过长时即可导致该任务大量叠加最后OOM。`newCachedThreadPool`允许的创建最大线程数量为`Integer.MAX_VALUE`，可以支持无限大的缓存导致OOM。*
+*总结一下的话就是`newSingleThreadExecutor`和`newFixedThreadPool`的阻塞队列为极限是`Integer.MAX_VALUE`的有界阻塞队列，如果超过核心线程的数量，将会放入队列中，单个任务时间过长时会导致任务量过大时可能会导致内存溢出。`newScheduledThreadPool`允许的创建最大线程数量为`Integer.MAX_VALUE`，且延迟队列中的数组支持动态扩容 单个任务时间过长时即可导致该任务大量叠加最后OOM。`newCachedThreadPool`允许的创建最大线程数量为`Integer.MAX_VALUE`，可以支持无限大的缓存导致OOM。*
 
 
 
@@ -153,7 +153,7 @@ public static ExecutorService newCachedThreadPool() {
 
 我们看下这个构造
 
-```
+```java
 
     /**
      * Creates a new {@code ThreadPoolExecutor} with the given initial
@@ -207,13 +207,13 @@ public static ExecutorService newCachedThreadPool() {
 
 举个栗子
 
-```
+```java
 ExecutorService executor = new ThreadPoolExecutor(10, 10, 60L, TimeUnit.SECONDS, new ArrayBlockingQueue(10));
 ```
 
 即可，另外这个类还有两个不同参的构造，多了
 
-```
+```java
 ThreadFactory threadFactory
 RejectedExecutionHandler handler
 ```
