@@ -32,7 +32,7 @@
 
 服务端：
 
-```
+```java
 public class PlainEchoServer {
     //线程池
     private static final ExecutorService executorPool = Executors.newFixedThreadPool(5);
@@ -105,7 +105,7 @@ public class PlainEchoServer {
 
 客户端:
 
-```
+```java
 public class PlainEchoClient {
 
     public static void main(String args[]) throws Exception {
@@ -182,7 +182,7 @@ public class PlainEchoClient {
 
 服务端:
 
-```
+```java
 public class NIOServer {
 
     private ByteBuffer      readBuffer;
@@ -345,7 +345,7 @@ public class NIOServer {
 
 客户端：
 
-```
+```java
 public class NIOClient implements Runnable {
 
     private BlockingQueue<String> words;
@@ -482,7 +482,7 @@ public class NIOClient implements Runnable {
 
 放一下工具类
 
-```
+```java
 public class CharsetHelper {
     private static final String UTF_8 = "UTF-8";
     private static CharsetEncoder encoder = Charset.forName(UTF_8).newEncoder();
@@ -524,7 +524,7 @@ public class CharsetHelper {
 
   `AsynchronousServerSocketChannel `	
 
-  AsynchronousFileChannel `	
+  `AsynchronousFileChannel `	
 
   `AsynchronousDatagramChannel ` 
 
@@ -532,7 +532,7 @@ public class CharsetHelper {
 
   open()静态工厂：  
 
-  ```
+  ```java
         	public static AsynchronousServerSocketChannel open(AsynchronousChannelGroup group)        
   
         	public static AsynchronousServerSocketChannel open()        
@@ -544,7 +544,7 @@ public class CharsetHelper {
 
   accept()用于接收用户连接请求。 
 
-  ```
+  ```java
   	AsynchronousServerSocketChannel server = AsynchronousServerSocketChannel.open().bind(new InetSocketAddress(PORT); 
   
   	public abstract <A> void accept(A attachment,CompletionHandler<AsynchronousSocketChannel,? super A> handler); 
@@ -558,13 +558,13 @@ public class CharsetHelper {
 
   这个通道处理提供open静态工厂方法外，还提供了read和write方法。 	
 
-  ```
+  ```java
   public abstract Future<Void> connect(SocketAddress remote);
   ```
 
    Future对象的get()方法会阻塞该线程，所以这种方式是阻塞式的异步IO 
 
-  ```
+  ```java
   public abstract <A> void connect(SocketAddress remote,  A attachment,CompletionHandler<Void,? super A> handler);
   ```
 
@@ -586,7 +586,7 @@ public class CharsetHelper {
 
 服务端
 
-```
+```java
 public class ServerOnFuture {
     static final int PORT = 8088;
     static final String IP = "localhost";
@@ -650,7 +650,7 @@ public class ServerOnFuture {
 
 服务端Future方式实现多客户端并发
 
-```
+```java
 public class ServerOnFuture {
     static final int PORT = 10000;
     static final String IP = "localhost";
@@ -720,7 +720,7 @@ public class ServerOnFuture {
 
 客户端
 
-```
+```java
 public class ClientOnFuture {
     static final int PORT = 8088;
     static final String IP = "localhost";
@@ -783,7 +783,7 @@ public class ClientOnFuture {
 
 服务端:
 
-```
+```java
 public class ServerOnCompletionHandler {
     static final int PORT = 8088;
     static final String IP = "localhost";
@@ -852,7 +852,7 @@ public class ServerOnCompletionHandler {
 
 客户端:
 
-```
+```java
 /**
  * 客户端
  */
@@ -925,7 +925,7 @@ public class ClientOnCompletionHandler {
 当read请求的数据到达时，由`内核负责读取socket中的数据`，并`写入用户指定的缓冲区`中。
 最后内核将read的数据和用户线程注册的`CompletionHandler`分发给`内部Proactor`，`Proactor`将IO完成的信息`通知给用户线程`（一般通过调用用户线程注册的完成事件处理函数），完成异步IO。
 
-```
+```java
 public class ServerOnReaderAndWriterForMultiClients {
     static final int PORT = 8088;
     static final String IP = "localhost";
