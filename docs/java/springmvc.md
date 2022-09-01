@@ -31,7 +31,7 @@ jdk17
 
 
 
-```
+```java
   <servlet>
     <servlet-name>dispatcherServlet</servlet-name>
     <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
@@ -55,7 +55,7 @@ jdk17
 我们知道，Servlet初始化时，Servlet的 `init()`方法会被调用。我们进入 `DispatcherServlet`中，发现并没有该方法，那么肯定在它集成的父类上。
  `DispatcherServlet` 继承于 `FrameworkServlet`，结果还是没找到，继续找它的父类 `HttpServletBean`。可以看到如下`init`方法
 
-```
+```java
 @Override
 	public final void init() throws ServletException {
 
@@ -84,11 +84,11 @@ jdk17
 	}
 ```
 
-`getServletConfig`由servlet-api的`GenericServlet`提供
+`getServletConfig`由`servlet-api`的`GenericServlet`提供
 
 我们主要看`initServletBean`方法，回到`FrameworkServlet`类中
 
-```
+```java
 @Override
 	protected final void initServletBean() throws ServletException {
 		getServletContext().log("Initializing Spring " + getClass().getSimpleName() + " '" + getServletName() + "'");
@@ -126,7 +126,7 @@ jdk17
 
 我们重点看下`initWebApplicationContext`方法，代码如下
 
-```
+```java
 protected WebApplicationContext initWebApplicationContext() {
 		WebApplicationContext rootContext =
 				WebApplicationContextUtils.getWebApplicationContext(getServletContext());
@@ -186,7 +186,7 @@ protected WebApplicationContext initWebApplicationContext() {
 
 接来下，我们看子类 `DispatcherServlet` 复写的 `onRefresh()`方法。方法如下所示
 
-```
+```java
 @Override
 	protected void onRefresh(ApplicationContext context) {
 		initStrategies(context);
@@ -241,7 +241,7 @@ protected WebApplicationContext initWebApplicationContext() {
 
 首先`HandlerMapping` 处理器映射，我们可以看到`DispatcherServlet` 有许多成员变量，我们把相关的成员变量也带上
 
-```
+```java
 //处理器映射集合
 private List<HandlerMapping> handlerMappings;
 //一个开关，标识是否获取所有的处理器映射，如果为false，则搜寻指定名为的 handlerMapping 的 Bean实例
@@ -301,14 +301,14 @@ private void initHandlerMappings(ApplicationContext context) {
 
 如果找不到任何一个映射关系，会通过 `getDefaultStrategies` 方法，从配置文件中获取默认配置。其他组件找不到时，也是调用这个方法进行默认配置
 
-配置文件名：DispatcherServlet.properties。会加入2个默认的映射关系类 `BeanNameUrlHandlerMapping` 、 `RequestMappingHandlerMapping`。
+配置文件名：`DispatcherServlet.properties`。会加入2个默认的映射关系类 `BeanNameUrlHandlerMapping` 、 `RequestMappingHandlerMapping`。
 
 下面看下`HandlerAdapter` 处理器适配器的初始化流程
 
 `HandlerAdapter` 的初始化逻辑和上面的 `HandlerMapping` 基本一样。从容器中搜寻所有 `HandlerAdapter` 的实例。
  如果找不到，则从配置文件中获取`默认` 的 `HandlerAdapter`。
 
-```
+```java
 private List<HandlerAdapter> handlerAdapters;
 //和上面HandlerMapping一样，一个开关，是否搜寻容器中所有的HandlerAdapter，如果为false，则搜寻指定名为 handlerAdapter 的Bean
 private boolean detectAllHandlerAdapters = true;
@@ -355,7 +355,7 @@ HandlerExceptionResolver 异常处理器
 
 和上面的一样，从容器中搜寻所有的异常处理器的实例，也有一个开关去搜索指定名称的异常处理器。
 
-```
+```java
 private List<HandlerExceptionResolver> handlerExceptionResolvers;
 //开关，是否搜索所有的异常处理器，设置为false，就会找下面名为 handlerExceptionResolver 的Bean实例
 private boolean detectAllHandlerExceptionResolvers = true;
@@ -404,7 +404,7 @@ ViewResolver 视图解析器
 
 视图解析器和上面的解析器逻辑一样，先有开关决定是搜寻容器中所有的，还是搜寻指定名称的。
 
-```
+```java
 private List<ViewResolver> viewResolvers;
 //开关
 private boolean detectAllViewResolvers = true;
@@ -452,7 +452,7 @@ private void initViewResolvers(ApplicationContext context) {
 
 当请求进入时，我们都知道会调用Servlet的 `service()` 方法，我们试着去 `DispatchServlet` 中搜索，发现没有。我们去到父类 `FrameworkServlet` 找到了。我们看下代码
 
-```
+```java
 	@Override
 	protected void service(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
@@ -472,7 +472,7 @@ private void initViewResolvers(ApplicationContext context) {
 
 我们进入父类HttpServlet，确切的说是父类的父类HttpServletBean的父类HttpServlet区分
 
-```
+```java
 protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String method = req.getMethod();
 
@@ -533,7 +533,7 @@ protected void service(HttpServletRequest req, HttpServletResponse resp) throws 
 
 以上这段是servlet-api的实现，用来区分请求，但是springmvc在`FrameworkServlet`中重写了这些方法（如下所示），所以父类的仅仅是用来区分请求
 
-```
+```java
 /**
 	 * Delegate GET requests to processRequest/doService.
 	 * <p>Will also be invoked by HttpServlet's default implementation of {@code doHead},
@@ -633,7 +633,7 @@ protected void service(HttpServletRequest req, HttpServletResponse resp) throws 
 
 我们从以上重写的代码可知最终都调用了`processRequest`方法我们看下代码
 
-```
+```java
 protected final void processRequest(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
 
@@ -680,7 +680,7 @@ protected final void processRequest(HttpServletRequest request, HttpServletRespo
 
 我们进入`DispatcherServlet` 的`doService`方法
 
-```
+```java
 @Override
 	protected void doService(HttpServletRequest request, HttpServletResponse response) throws Exception {
 		//打印请求
@@ -760,7 +760,7 @@ doDispatch() 分发请求给各个组件处理，这个是请求分发的的关�
 
 > 我们还需要知道一个概念springmvc是基于拦截器实现的
 
-```
+```java
 protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
 		HttpServletRequest processedRequest = request;
 		//本次请求的处理器以及拦截器，它们组合成一个执行链
@@ -864,7 +864,7 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 
 我们看下`AbstractHandlerMapping`的 `getHandler()`方法
 
-```
+```java
 	@Override
 	@Nullable
 	public final HandlerExecutionChain getHandler(HttpServletRequest request) throws Exception {
@@ -922,7 +922,7 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 
 AbstractHandlerMethodMapping查询注解的方式，我们简单追踪下可以看它的如下调用链
 
-```
+```java
 	
 	//AbstractHandlerMethodMapping中
 	@Override
@@ -991,7 +991,7 @@ AbstractHandlerMethodMapping查询注解的方式，我们简单追踪下可以�
 
 getHandlerAdapter() 获取处理器对应的适配器,我们返回`doDispatch`方法进入getHandlerAdapter()代码如下
 
-```
+```java
 protected HandlerAdapter getHandlerAdapter(Object handler) throws ServletException {
 		if (this.handlerAdapters != null) {
 		    //责任链模式，遍历调用适配器集合，调用supports()方法，询问每个适配器，是否支持当前的处理器
@@ -1013,7 +1013,7 @@ protected HandlerAdapter getHandlerAdapter(Object handler) throws ServletExcepti
 
 `HttpRequestHandlerAdapter`，适配 `HttpRequestHandler` 作为handler的适配器。
 
-```
+```java
 public class HttpRequestHandlerAdapter implements HandlerAdapter {
 
 	@Override
@@ -1044,7 +1044,7 @@ public class HttpRequestHandlerAdapter implements HandlerAdapter {
 
 `SimpleServletHandlerAdapter`，适配 `Servlet` 作为handler的适配器
 
-```
+```java
 public class SimpleServletHandlerAdapter implements HandlerAdapter {
 
 	@Override
@@ -1070,9 +1070,9 @@ public class SimpleServletHandlerAdapter implements HandlerAdapter {
 }
 ```
 
-`SimpleControllerHandlerAdapter`，适配 `Controller` 接口 作为handler的适配器
+`SimpleControllerHandlerAdapter`，适配 `Controller` 接口 作为`handler`的适配器
 
-```
+```java
 public class SimpleControllerHandlerAdapter implements HandlerAdapter {
 
 	@Override
@@ -1104,7 +1104,7 @@ public class SimpleControllerHandlerAdapter implements HandlerAdapter {
 
 我们回到 `DispatcherServletdo`的`Dispatch`方法看下`applyPreHandle`方法，来到`HandlerExecutionChain`的`applyPreHandle`
 
-```
+```java
 boolean applyPreHandle(HttpServletRequest request, HttpServletResponse response) throws Exception {
 		for (int i = 0; i < this.interceptorList.size(); i++) {
 			HandlerInterceptor interceptor = this.interceptorList.get(i);
@@ -1125,7 +1125,7 @@ boolean applyPreHandle(HttpServletRequest request, HttpServletResponse response)
 
 和前置通知不同，后置通知没有拦截功能，只能是增强。逻辑还是遍历拦截器链，调用拦截器的 `postHandle()` 方法。
 
-```
+```java
 void applyPostHandle(HttpServletRequest request, HttpServletResponse response, @Nullable ModelAndView mv)
       throws Exception {
 
@@ -1145,7 +1145,7 @@ void applyPostHandle(HttpServletRequest request, HttpServletResponse response, @
 
 我们回到 `DispatcherServletdo`的`Dispatch`方法，看下`processDispatchResult`方法
 
-```
+```java
 	private void processDispatchResult(HttpServletRequest request, HttpServletResponse response,
 			@Nullable HandlerExecutionChain mappedHandler, @Nullable ModelAndView mv,
 			@Nullable Exception exception) throws Exception {
@@ -1211,7 +1211,7 @@ void applyPostHandle(HttpServletRequest request, HttpServletResponse response, @
 
 我们进入`processDispatchResult`的`render()` 方法看下
 
-```
+```java
 protected void render(ModelAndView mv, HttpServletRequest request, HttpServletResponse response) throws Exception {
    // Determine locale for request and apply it to the response.
    Locale locale =
@@ -1263,7 +1263,7 @@ protected void render(ModelAndView mv, HttpServletRequest request, HttpServletRe
 
 我们进入render方法的`resolveViewName()`方法查看如何进行视图解析
 
-```
+```java
 @Nullable
 	protected View resolveViewName(String viewName, @Nullable Map<String, Object> model,
 			Locale locale, HttpServletRequest request) throws Exception {
@@ -1286,7 +1286,7 @@ protected void render(ModelAndView mv, HttpServletRequest request, HttpServletRe
 
 ViewResolver解析器是一个接口，他有几个实现类，对应支持的视图技术。
 
-```
+```java
 public interface ViewResolver {
 
 	/**
@@ -1319,7 +1319,7 @@ public interface ViewResolver {
 
 > 我们看一下View对象
 
-```
+```java
 
 
 /**
@@ -1422,7 +1422,7 @@ public interface View {
 
 我们跟踪rander进入AbstractView的rander方法如下图所示，看到`renderMergedOutputModel`方法,然后随便找个实现，这里以`AbstractJackson2View`为列子,代码如下
 
-```
+```java
 @Override
 	protected void renderMergedOutputModel(Map<String, Object> model, HttpServletRequest request,
 			HttpServletResponse response) throws Exception {
@@ -1434,7 +1434,7 @@ public interface View {
 			temporaryStream = createTemporaryOutputStream();
 			stream = temporaryStream;
 		}
-		else {
+		else {java
 			stream = response.getOutputStream();
 		}
 
@@ -1453,7 +1453,7 @@ public interface View {
 
 我们进入applyAfterConcurrentHandlingStarted方法，代码如下
 
-```
+```java
 	void applyAfterConcurrentHandlingStarted(HttpServletRequest request, HttpServletResponse response) {
 		for (int i = this.interceptorList.size() - 1; i >= 0; i--) {
 			HandlerInterceptor interceptor = this.interceptorList.get(i);
@@ -1500,7 +1500,7 @@ public interface View {
 
 第一个问题,从头追踪比较长，我们直接写成果，我们debug直到下进入下图方法
 
-```
+```java
 	@Nullable
 	private HandlerMethodReturnValueHandler selectHandler(@Nullable Object value, MethodParameter returnType) {
 		boolean isAsyncValue = isAsyncReturnValue(value, returnType);
@@ -1520,7 +1520,7 @@ public interface View {
 
 RequestResponseBodyMethodProcessor,继续跟踪得到
 
-```
+```java
  public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws IOException, HttpMediaTypeNotAcceptableException, HttpMessageNotWritableException {
        //视图是否需要解析，如果是true就不需要解析
         mavContainer.setRequestHandled(true);
@@ -1535,7 +1535,7 @@ RequestResponseBodyMethodProcessor,继续跟踪得到
 
 核心方法就是
 
-```
+```java
 protected <T> void writeWithMessageConverters(@Nullable T value, MethodParameter returnType,
 		ServletServerHttpRequest inputMessage, ServletServerHttpResponse outputMessage)
 		throws IOException, HttpMediaTypeNotAcceptableException, HttpMessageNotWritableException {
@@ -1708,7 +1708,7 @@ protected <T> void writeWithMessageConverters(@Nullable T value, MethodParameter
 
 这个问题我们先来根据我们上述分析经验猜测下，肯定也是在handle这一步去处理的，我们跟进debug源码，很快来到了`RequestMappingHandlerAdapter`类，
 
-```
+```java
   protected boolean supportsInternal(HandlerMethod handlerMethod) {
         return true;
     }
@@ -1744,7 +1744,7 @@ protected <T> void writeWithMessageConverters(@Nullable T value, MethodParameter
 
 发现当`invokeHandlerMethod`这个方法执行完后就有了参数我们进去看看
 
-```
+```java
 @Nullable
 	protected ModelAndView invokeHandlerMethod(HttpServletRequest request,
 			HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
@@ -1804,13 +1804,13 @@ protected <T> void writeWithMessageConverters(@Nullable T value, MethodParameter
 
 我们发现当以下方法执行后则有了参数，所以我们继续进去
 
-```
+```java
 invocableMethod.invokeAndHandle(webRequest, mavContainer);
 ```
 
 代码如下
 
-```
+```java
  public void invokeAndHandle(ServletWebRequest webRequest, ModelAndViewContainer mavContainer, Object... providedArgs) throws Exception {
  //此处
         Object returnValue = this.invokeForRequest(webRequest, mavContainer, providedArgs);
@@ -1842,7 +1842,7 @@ invocableMethod.invokeAndHandle(webRequest, mavContainer);
 
 this.invokeForRequest执行后就有了参数，我们进去，代码如下
 
-```
+```java
 @Nullable
 	public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
 			Object... providedArgs) throws Exception {
@@ -1864,7 +1864,7 @@ this.invokeForRequest执行后就有了参数，我们进去，代码如下
 
 我们可见关键方法doInvoke
 
-```
+```java
 protected Object doInvoke(Object... args) throws Exception {
 		ReflectionUtils.makeAccessible(getBridgedMethod());
 		try {
@@ -1902,7 +1902,7 @@ protected Object doInvoke(Object... args) throws Exception {
 
 可见在更上层就已经完成了参数序列化，我们重新跟踪发现是invokeForRequest的getMethodArgumentValues()处生成
 
-```
+```java
 protected Object[] getMethodArgumentValues(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
 			Object... providedArgs) throws Exception {
 
@@ -1942,7 +1942,7 @@ protected Object[] getMethodArgumentValues(NativeWebRequest request, @Nullable M
 
 这边做下解释，总体的方法意思就是选择合适的MessageConverter来序列化,这边debug,进入 this.resolvers.resolveArgument，最终会来到
 
-```
+```java
 protected <T> Object readWithMessageConverters(NativeWebRequest webRequest, MethodParameter parameter, Type paramType) throws IOException, HttpMediaTypeNotSupportedException, HttpMessageNotReadableException {
         HttpServletRequest servletRequest = (HttpServletRequest)webRequest.getNativeRequest(HttpServletRequest.class);
         Assert.state(servletRequest != null, "No HttpServletRequest");
@@ -1958,7 +1958,7 @@ protected <T> Object readWithMessageConverters(NativeWebRequest webRequest, Meth
 
 这一步可能有点跳跃，感兴趣的自己debug看下，这里关键代码就是readWithMessageConverters，我们进去
 
-```
+```java
 @Nullable
 	protected <T> Object readWithMessageConverters(HttpInputMessage inputMessage, MethodParameter parameter,
 			Type targetType) throws IOException, HttpMediaTypeNotSupportedException, HttpMessageNotReadableException {
@@ -2042,7 +2042,7 @@ Strategy interface that specifies a converter that can convert from and to HTTP 
 
 我们进入一个叫addDefaultHttpMessageConverters的类
 
-```
+```java
 protected final void addDefaultHttpMessageConverters(List<HttpMessageConverter<?>> messageConverters) {
 		messageConverters.add(new ByteArrayHttpMessageConverter());
 		messageConverters.add(new StringHttpMessageConverter());
