@@ -191,22 +191,6 @@ tomcat设计了三个组件 EndPoint、Processor、Adapter 来对应完成上述
 
 
 
-
-
-
-
->在这里可能大家会有一个疑问，不是说 ProtocolHandler 是对 EndPoint 组件 和 Processor 组件的封装吗？为什么从源码中完全看不出来，很好的一个问题，有关于 EndPoint 组件和 Processor 组件的设计细节以及它们的交互过程我们会在源码部分给出答案。
-
-
-
-
-
-
-
-
-
-
-
 **容器部分的设计:**
 
 ![avatar](https://picture.zhanghong110.top/docsify/16397916916459.png)
@@ -470,7 +454,7 @@ tomcat 作为一个框架，尤其是作为一个 Web 容器框架，监听机�
 
 我们来看下Connector的构造方法，有如下三个构造方法
 
-```
+```java
    public Connector() {
         this("HTTP/1.1");  默认无参构造会传入HTTP/1.1
     }
@@ -509,7 +493,7 @@ tomcat 作为一个框架，尤其是作为一个 Web 容器框架，监听机�
 
 由上述代码可知，当调用无参构造时会调用第二个构造方法，其核心create方法如下
 
-```
+```java
  public static ProtocolHandler create(String protocol)
             throws ClassNotFoundException, InstantiationException, IllegalAccessException,
             IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
@@ -531,7 +515,7 @@ tomcat 作为一个框架，尤其是作为一个 Web 容器框架，监听机�
 
 下面我们来分析下Connector.init()方法
 
-```
+```java
 @Override
     protected void initInternal() throws LifecycleException {
 
@@ -580,7 +564,7 @@ tomcat 作为一个框架，尤其是作为一个 Web 容器框架，监听机�
 
 我们追踪到AbstractHttp11Protocol的init，发现它调用了父类的init，其代码如下
 
-```
+```java
   @Override
     public void init() throws Exception {
         if (getLog().isInfoEnabled()) {
@@ -613,7 +597,7 @@ tomcat 作为一个框架，尤其是作为一个 Web 容器框架，监听机�
 
 我们由上述代码不难看出，核心是初始化了endpoint,我们进去  endpoint.init();发现该方法位于抽象类AbstractEndpoint，该类是基于模板方法模式实现的，主要调用了子类的`bindWithCleanup()`方法，里面直接执行了`bind()`方法。代码如下
 
-```
+```java
 public final void init() throws Exception {
         if (bindOnInit) {
             bindWithCleanup();
@@ -642,7 +626,7 @@ bind的实现由下面两个类提供，NIO2Endpoint，它跟NIOEndpoint的区�
 
 我们进入NIO2Endpoint的bind方法代码如下
 
-```
+```java
     @Override
     public void bind() throws Exception {
 
@@ -672,7 +656,7 @@ bind的实现由下面两个类提供，NIO2Endpoint，它跟NIOEndpoint的区�
 
 接下来我们分析下Connector.start()方法
 
-```
+```java
   @Override
     protected void startInternal() throws LifecycleException {
 
@@ -696,7 +680,7 @@ bind的实现由下面两个类提供，NIO2Endpoint，它跟NIOEndpoint的区�
 
 关键代码就一行protocolHandler.start();由抽象类AbstractAjpProtocol及AbstractProtocol提供实现，我们进入AbstractProtocol的start方法
 
-```
+```java
 @Override
 public void start() throws Exception {
     if (getLog().isInfoEnabled()) {
@@ -716,7 +700,7 @@ public void start() throws Exception {
 
 发现它调用endpoint.start(),我们进入后发现又回到了刚才那两个bind方法的实现。我们已经分析过了这边略过
 
-```
+```java
     public final void start() throws Exception {
         if (bindState == BindState.UNBOUND) {
             bindWithCleanup();
@@ -728,7 +712,7 @@ public void start() throws Exception {
 
 之后进入startInternal，它也是由NIO2Endpoint及NIOEndpoint提供实现，我们进入NIO2Endpoint的startInternal方法如下所示
 
-```
+```java
   @Override
     public void startInternal() throws Exception {
 
@@ -797,7 +781,7 @@ nio2:
 
 从startInternal中的startAcceptorThread方法进入，我们可以看到如下代码
 
-```
+```java
 protected void startAcceptorThread() {
         acceptor = new Acceptor<>(this);
         String threadName = getName() + "-Acceptor";
@@ -811,7 +795,7 @@ protected void startAcceptorThread() {
 
 最终执行了start方法，所以哦我们进入Acceptor查看重写的run方法如下
 
-```
+```java
 @Override
     public void run() {
 
@@ -929,7 +913,7 @@ protected void startAcceptorThread() {
 
 下面我们进入setSocketOptions查看处理方式，我们先进入NioEndpoint的实现代码如下：
 
-```
+```java
 protected boolean setSocketOptions(SocketChannel socket) {
         NioSocketWrapper socketWrapper = null;
         try {
@@ -999,7 +983,7 @@ Poller线程数由NioEndPoint的pollerThreadCount成员变量控制，默认值�
 
 Poller实现了Runnable接口，可以看到构造函数为每个Poller打开了一个新的Selector。
 
-```
+```java
 //构造函数
 public Poller() throws IOException {
     this.selector = Selector.open();
@@ -1008,7 +992,7 @@ public Poller() throws IOException {
 
 这个类有两个比较关键的方法Poller.register(),我们来看一下
 
-```
+```java
   public void register(final NioSocketWrapper socketWrapper) {
             socketWrapper.interestOps(SelectionKey.OP_READ);//this is what OP_REGISTER turns into.
             PollerEvent event = null;
@@ -1034,7 +1018,7 @@ public Poller() throws IOException {
 
 接下来我们来看下run函数的功能
 
-```
+```java
  @Override
         public void run() {
             // Loop until destroy() is called
@@ -1105,7 +1089,7 @@ public Poller() throws IOException {
 
 接下去我们分析processKey方法代码如下
 
-```
+```java
 protected void processKey(SelectionKey sk, NioSocketWrapper socketWrapper) {
             try {
                 if (close) {
@@ -1176,7 +1160,7 @@ protected void processKey(SelectionKey sk, NioSocketWrapper socketWrapper) {
 
 由上面的方法可以看出，处理关键方法为processSocket方法，我们进入它，位于AbstractEndpoint，代码如下
 
-```
+```java
 public boolean processSocket(SocketWrapperBase<S> socketWrapper,
             SocketEvent event, boolean dispatch) {
         try {
@@ -1224,7 +1208,7 @@ dispatch参数表示是否要在另外的线程中处理，上文processKey各�
 
 我们看一下createSocketProcessor方法
 
-```
+```java
  @Override
     protected SocketProcessorBase<NioChannel> createSocketProcessor(
             SocketWrapperBase<NioChannel> socketWrapper, SocketEvent event) {
@@ -1236,7 +1220,7 @@ dispatch参数表示是否要在另外的线程中处理，上文processKey各�
 
 我们回到NioEndPoint，看SocketProcessor的run方法最终做了什么，代码如下
 
-```
+```java
  @Override
         protected void doRun() {
             /*
@@ -1325,7 +1309,7 @@ dispatch参数表示是否要在另外的线程中处理，上文processKey各�
 
 首先该类有如下注释
 
-```
+```java
 /**
  * This class is the equivalent of the Worker, but will simply use in an
  * external Executor thread pool.
@@ -1334,7 +1318,7 @@ dispatch参数表示是否要在另外的线程中处理，上文processKey各�
 
 翻译可知SocketProcessor与Worker的作用等价。Handler`的关键方法是`process(),虽然这个方法有很多条件分支，但是逻辑却非常清楚，主要是调用Processor.process()方法我们跟进可以进入AbstractProtocol的process方法，这个方法有点长就不贴了，其核心代码为下面这句
 
-```
+```java
   state = processor.process(wrapper, status);
 ```
 
@@ -1346,13 +1330,13 @@ processor:
 
 在process方法种还有一句代码如下所示，由所调用的`AbstractHttp11Protocol`和`AbstractAjpProtocol`来实现
 
-```
+```java
 processor = getProtocol().createProcessor();
 ```
 
 我们由此可以进入这个方法，发现调用了下面的构造方法，设置了一些配置属性
 
-```
+```java
 public Http11Processor(AbstractHttp11Protocol<?> protocol, Adapter adapter) {
         super(adapter);
         this.protocol = protocol;
@@ -1394,7 +1378,7 @@ public Http11Processor(AbstractHttp11Protocol<?> protocol, Adapter adapter) {
 
 下面我们进入核心代码processor.process，主要关注其对读的操作，也只有一行代码。调用`service()`方法。
 
-```
+```java
  @Override
     public SocketState process(SocketWrapperBase<?> socketWrapper, SocketEvent status)
             throws IOException {
@@ -1461,7 +1445,7 @@ public Http11Processor(AbstractHttp11Protocol<?> protocol, Adapter adapter) {
 1. 生成Request和Response对象
 2. 调用`Adapter.service()`方法，将生成的Request和Response对象传进去
 
-```
+```java
   rp.setStage(org.apache.coyote.Constants.STAGE_SERVICE);
   //传入生成的Request和Response对象传进去
   getAdapter().service(request, response);
@@ -1479,7 +1463,7 @@ adapter:
 
 代码如下，由CoyoteAdapter类提供
 
-```
+```java
 @Override
     public void service(org.apache.coyote.Request req, org.apache.coyote.Response res)
             throws Exception {
@@ -1619,7 +1603,7 @@ adapter:
 
 请求预处理，上面代码的postParseRequest方法，如下所示
 
-```
+```java
 protected boolean postParseRequest(org.apache.coyote.Request req, Request request,
         org.apache.coyote.Response res, Response response) throws IOException, ServletException {
 
@@ -1944,15 +1928,13 @@ protected boolean postParseRequest(org.apache.coyote.Request req, Request reques
 
 （2）调用servlet的init方法
 
-
-
 在StandardContext的startInternal中，它触发了一个init的时候设置的监听器ContextConfig，这个监听器将进行Context的相关配置处理
 
-```
+```java
   fireLifecycleEvent(Lifecycle.CONFIGURE_START_EVENT, null);
 ```
 
-```
+```java
  protected void fireLifecycleEvent(String type, Object data) {
         LifecycleEvent event = new LifecycleEvent(this, type, data);
         for (LifecycleListener listener : lifecycleListeners) {
@@ -1963,7 +1945,7 @@ protected boolean postParseRequest(org.apache.coyote.Request req, Request reques
 
 我们进入其ContextConfig的实现类
 
-```
+```java
  @Override
     public void lifecycleEvent(LifecycleEvent event) {
 
@@ -1998,7 +1980,7 @@ protected boolean postParseRequest(org.apache.coyote.Request req, Request reques
 
 可见该方法委托给了`configureStart`进行处理，我们进去看下
 
-```
+```java
 protected synchronized void configureStart() {
         // Called from StandardContext.start()
 
@@ -2058,7 +2040,7 @@ protected synchronized void configureStart() {
 
 核心方法为webConfig，如下所示
 
-```
+```java
     protected void webConfig() {
        
         WebXmlParser webXmlParser = new WebXmlParser(context.getXmlNamespaceAware(),
@@ -2186,7 +2168,7 @@ protected synchronized void configureStart() {
 
 3.getServletContext创建了一个ApplicationContext，而ApplicationContext则是ServletContext的实现类。
 
-```
+```java
  @Override
     public ServletContext getServletContext() {
         if (context == null) {
@@ -2207,7 +2189,7 @@ protected synchronized void configureStart() {
 
 稍往下有这句
 
-```
+```java
  context.addChild(wrapper);
 ```
 
@@ -2221,7 +2203,7 @@ protected synchronized void configureStart() {
 
 我们回到StandardContext的startInternal方法里，方法太长，截取关键段落
 
-```
+```java
 // Call ServletContainerInitializers
             for (Map.Entry<ServletContainerInitializer, Set<Class<?>>> entry :
                 initializers.entrySet()) {
@@ -2242,7 +2224,7 @@ ServletContainerInitializers将被循环调用onStartup方法，传入ServletCon
 
 然后再往下通过wrapper容器，加载Servlet，如
 
-```
+```java
  // Load and initialize all "load on startup" servlets
             if (ok) {
                 if (!loadOnStartup(findChildren())){
@@ -2254,7 +2236,7 @@ ServletContainerInitializers将被循环调用onStartup方法，传入ServletCon
 
 我们进入loadOnStartup看一下代码如下
 
-```
+```java
  public boolean loadOnStartup(Container children[]) {
 
         // Collect "load on startup" servlets that need to be initialized
@@ -2302,7 +2284,7 @@ ServletContainerInitializers将被循环调用onStartup方法，传入ServletCon
 
 看看StandardWrapper的load方法做了啥代码如下
 
-```
+```java
 @Override
     public synchronized void load() throws ServletException {
         instance = loadServlet();//加载并返回一个Servlet实例
@@ -2341,7 +2323,7 @@ ServletContainerInitializers将被循环调用onStartup方法，传入ServletCon
 
 首先loadServlet,比较长，我们看关键
 
-```
+```java
   try {
                 servlet = (Servlet) instanceManager.newInstance(servletClass);
             } catch (ClassCastException e) {
@@ -2351,7 +2333,7 @@ ServletContainerInitializers将被循环调用onStartup方法，传入ServletCon
 
 然后看下initServlet
 
-```
+```java
 private synchronized void initServlet(Servlet servlet)
             throws ServletException {
 
