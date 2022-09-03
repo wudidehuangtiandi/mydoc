@@ -1,4 +1,4 @@
-# MYSQL
+# aMYSQL
 
 ## 一.mysql集群
 
@@ -161,3 +161,123 @@ show status like "%WSREP%"
 ![avatar](https://picture.zhanghong110.top/docsify/16537251385801.png)
 
 > 这个集群初步得搭建就到这里了，实际过程中应该多少还有些问题，我们遇到了再进行处理
+
+## 二.条件位置和执行顺序
+
+> 我们可能经常这种left join，inner join这种连接，却发现居然只是模糊的认识。
+
+那么，当条件跟在`where`后面和条件在`and`后面时有什么区别呢？
+
+我们使用`m` 和 `s`两张表做个演示，内容如下
+
+`m`:
+
+![avatar](https://picture.zhanghong110.top/docsify/16621670659303.png)
+
+`n`:
+
+![avatar](https://picture.zhanghong110.top/docsify/16621640883680.png)
+
+这样我们使用如下语句对比结果
+
+1.首先是`left join` 
+
+> 我们对a表做对比
+
+```sql
+SELECT * FROM `m` a  left join `s` b  on a.id = b.mid  where a.delete=0 order by a.id 
+```
+
+结果为
+
+![avatar](https://picture.zhanghong110.top/docsify/16621671749751.png)
+
+可以看到。测试数据2应为`delete=0`完全没有显示。这种是`left join`正常筛选左表的方式。
+
+
+
+如果我们在`on`上对`a`表进行操作
+
+```sql
+SELECT * FROM `m` a  left join `s` b  on a.id = b.mid and a.delete=0 order by a.id 
+```
+
+结果为
+
+![avatar](https://picture.zhanghong110.top/docsify/16621672401373.png)
+
+正常如果不加 条件 `and a.delete=0 ` ，结果如下
+
+![avatar](https://picture.zhanghong110.top/docsify/16621672768405.png)
+
+一般查资料我们会得到`left join` 如果在`on`上加上左表条件将会不生效，实际我们发现，结果是左表记录都会被查出，但是左表不符合条件的列将不参与链接，导致其对应的右表数据为`null`
+
+
+
+我们接下来试下对b表做条件
+
+我们还是先用`where`做条件
+
+```sql
+SELECT * FROM `m` a  left join `s` b  on a.id = b.mid where b.delete= 0 order by a.id 
+```
+
+![avatar](https://picture.zhanghong110.top/docsify/16621674595800.png)
+
+如果加在`on`后面
+
+```sql
+SELECT * FROM `m` a  left join `s` b  on a.id = b.mid and b.delete= 0 order by a.id
+```
+
+![avatar](https://picture.zhanghong110.top/docsify/16621681197181.png)
+
+可以看出实际上`where`是链接后筛选了，由于`left join`的关系，我们关注的是`a`表，想要`a`表即使有记录未匹配到`b`表也可以被查询到。但是筛选的时候我们就等于没有了这一项。所以我们将`b`表条件放在`on`中比较合理，此时该条件只会影响`b`表中数据。
+
+
+
+!>right join 也同理
+
+2.下面我们对比下 `join (inner join)`
+
+> 首先我们还是先对a表做操作
+
+```sql
+SELECT * FROM `m` a   join `s` b  on a.id = b.mid  where a.delete=0 order by a.id 
+
+SELECT * FROM `m` a   join `s` b  on a.id = b.mid and a.delete=0 order by a.id 
+```
+
+这两条语句结果都是
+
+![avatar](https://picture.zhanghong110.top/docsify/16621699706344.png)
+
+可以看到，无论是先筛选再参与来链接还是先链接再筛选，对于`inner join`来说都是一样的。
+
+下面对`b`表做操作
+
+```sql
+SELECT * FROM `m` a   join `s` b  on a.id = b.mid where b.delete= 0 order by a.id 
+
+SELECT * FROM `m` a   join `s` b  on a.id = b.mid and b.delete= 0 order by a.id
+```
+
+![avatar](https://picture.zhanghong110.top/docsify/16621708432405.png)
+
+可以发现对于`b`表来说结果还都是一样的。
+
+可知这个条件仅对外链查询有影响。
+
+> 由此我们可以获得如下结论
+
+1.`where`和`on`的条件位置仅对外链查询有影响
+
+2.内联查询条件位置不影响
+
+3.外链查询对链接主表操作时应当将条件放在`where`中，如果放在`on`中，则不符合条件的不参与链接，但是依然会被查询出来。
+
+4.外链查询对从表操作时应当将条件放在`on`中，否则如果放在`where`中外链查询将会转换为和内链查询一样的作用，当放在`on`中时将会筛选从表而不影响主表。
+
+!>在实际操作过程中，有一个这样的场景，一条有十几万条记录的主表，`left join`查询一条五百万数据的表，`on`项都加了`b+`索引当主表加上`where`条件匹配少数列时查询成功，否则就慢查询，查询失败。
+
+由此我们思考下，当如果主从表先笛卡尔积，再筛选，就是十几万条和几百万条的笛卡尔积，再做筛选，这样能筛选出来吗？
