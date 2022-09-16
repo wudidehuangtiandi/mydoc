@@ -431,6 +431,115 @@ public class OldMan {
 
 
 
+## 策略模式
+
+> 在策略模式（Strategy Pattern）中，一个类的行为或其算法可以在运行时更改。这种类型的设计模式属于行为型模式。
+
+**意图：**定义一系列的算法,把它们一个个封装起来, 并且使它们可相互替换。
+
+**主要解决：**在有多种算法相似的情况下，使用 if...else 所带来的复杂和难以维护。
+
+**何时使用：**一个系统有许多许多类，而区分它们的只是他们直接的行为。
+
+**如何解决：**将这些算法封装成一个一个的类，任意地替换。
+
+**关键代码：**实现同一个接口。
+
+**应用实例：** 1、诸葛亮的锦囊妙计，每一个锦囊就是一个策略。 2、旅行的出游方式，选择骑自行车、坐汽车，每一种旅行方式都是一个策略。 3、JAVA AWT 中的 LayoutManager。
+
+我们先定义一个策略接口`Strategy`，里面包含一个方法`doOperation`用来给继承者进行实现操作。
+
+```java
+public interface Strategy {
+    //做出操作
+    public int doOperation(int num1, int num2);
+}
+```
+
+然后我们分别定义三个操作类，做加减和乘法操作
+
+```java
+//加 操作内部类
+public class OperationAdd implements Strategy {
+    @Override
+    public int doOperation(int num1, int num2) {
+        return num1 + num2;
+    }
+}
+```
+
+```java
+//减 操作内部类
+public class OperationSubtract implements Strategy {
+    @Override
+    public int doOperation(int num1, int num2) {
+        return num1 - num2;
+    }
+}
+```
+
+```java
+//乘 操作内部类
+public class OperationMultiply implements Strategy {
+    @Override
+    public int doOperation(int num1, int num2) {
+        return num1 * num2;
+    }
+}
+```
+
+再定义一个类，将这个`Strategy`接口作为参数,调用接口得操作方法
+
+```java
+public class Context {
+
+    private Strategy strategy;
+
+    //构造需要注入接口
+    public Context(Strategy strategy) {
+        this.strategy = strategy;
+    }
+
+    public int executeStrategy(int num1, int num2) {
+        return strategy.doOperation(num1, num2);
+    }
+}
+```
+
+最后我们调用一下
+
+```java
+public class StrategyPattern {
+
+    public static void main(String[] args) {
+
+
+        Context context = new Context(new OperationAdd());
+        System.out.println("10 + 5 = " + context.executeStrategy(10, 5));
+
+        context = new Context(new OperationSubtract());
+        System.out.println("10 - 5 = " + context.executeStrategy(10, 5));
+
+        context = new Context(new OperationMultiply());
+        System.out.println("10 * 5 = " + context.executeStrategy(10, 5));
+
+    }
+    
+}
+```
+
+输出
+
+```
+10 + 5 = 15
+10 - 5 = 5
+10 * 5 = 50
+```
+
+从而我们达到了用一个方法，根据注入接口得实现类得不同，做到了使用相同逻辑去处理，达到不同效果得目的。
+
+
+
 ## 代理模式
 
 > 代理模式作为java开发应该非常熟悉了，用于对类进行增强或者变更，可以用一个内存中产生的类代表另一个类的功能。
