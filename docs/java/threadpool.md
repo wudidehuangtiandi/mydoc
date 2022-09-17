@@ -201,7 +201,7 @@ public static ExecutorService newCachedThreadPool() {
 
 `keepAliveTime` – 当线程数大于核心时，这是多余空闲线程在终止前等待新任务的最长时间。
 
- `uni`t – `keepAliveTime` 参数的时间单位
+ `unit` – `keepAliveTime` 参数的时间单位
 
 `workQueue` – 用于在执行任务之前保存任务的队列。这个队列将只保存 execute 方法提交的 Runnable 任务。
 

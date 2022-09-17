@@ -1314,15 +1314,110 @@ select * from t1 where age=10 and name =‘tao’
 
 六 explain得各种type
 
+   eq_ref：主键或唯一键索引被连接使用，最多只会返回一条符合条件的记录。简单的select查询不会出现这种type。
 
+   ref：相比eq_ref，不使用唯一索引，而是使用普通索引或者唯一索引的部分前缀，索引和某个值比较，会找到多个符合条件的行。       
 
+   range：通常出现在范    围查询中，比如in、between、大于、小于等。使用索引来检索给定范围的行。
+
+   index：扫描全索引拿到结果，一般是扫描某个二级索引，二级索引一般比较少，所以通常比ALL快一点。
+
+   ALL：全表扫描，扫描聚簇索引的所有叶子节点。
 
 
 > spring增强
 
-一:循环依赖
+一:bean的生命周期
 
-二:bean初始化流程（IOC初始化流程）
+singleton时 当容器（ApplicationContext）创建时对象出生，容器销毁则对象消亡，单列对象的生命周期和容器相同
+
+prototype时 当我们使用时才创建，对象使用时一直活着，当对象长时间不用且没有引用时等待GC回收。
+
+
+
+
+
+二:ioc的流程
+
+无论是注解还是XML,最终都会使用`AbstractApplicationContext`中的refresh()方法这个方法完成了整个spring生命周期的初始化
+
+简单形容下：
+
+1.根据配置生成BeanDefinition
+
+2.通过BeanFactoryPostProcessor后置处理器 扩展BeanFactory 对BeanDefinition中的bean 进行类似 配置文件的属性注入 这种操作（比如JDBC 从括号换成具体地址）
+
+3.实例化bean 填充对象属性， 判断是否实现aware接口
+
+4.执行BeanPostProcessor后置处理器，重写postProcessBeforeInitialization（可以对实列化后的对象进行修改）和postProcessAfterInitialization（产生代理对象等操作）方法
+
+```Java
+@Override
+public void refresh() throws BeansException, IllegalStateException {
+    synchronized (this.startupShutdownMonitor) {
+        // 准备，记录容器的启动时间startupDate, 标记容器为激活，初始化上下文环境如文件路径信息，验证必填属性是否填写
+        prepareRefresh();
+        // 获取新的beanFactory，销毁原有beanFactory、为每个bean生成BeanDefinition等
+        ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
+        // 初始化beanfactory的各种属性
+        prepareBeanFactory(beanFactory);
+        try {
+            // 模板方法，此时，所有的beanDefinition已经加载，但是还没有实例化。
+            //允许在子类中对beanFactory进行扩展处理。比如添加aware相关接口自动装配设置，添加后置处理器等，是子类扩展prepareBeanFactory(beanFactory)的方法
+            postProcessBeanFactory(beanFactory);
+            // 实例化并调用所有注册的beanFactory后置处理器（实现接口BeanFactoryPostProcessor的bean，在beanFactory标准初始化之后执行）
+            invokeBeanFactoryPostProcessors(beanFactory);
+            // 实例化和注册beanFactory中扩展了BeanPostProcessor的bean
+            //例如：
+            // AutowiredAnnotationBeanPostProcessor(处理被@Autowired注解修饰的bean并注入)
+            // RequiredAnnotationBeanPostProcessor(处理被@Required注解修饰的方法)
+            // CommonAnnotationBeanPostProcessor(处理@PreDestroy、@PostConstruct、@Resource等多个注解的作用)等。
+            registerBeanPostProcessors(beanFactory);
+            // Initialize message source for this context.
+            initMessageSource();
+            // Initialize event multicaster for this context.
+            initApplicationEventMulticaster();
+            // 模板方法，在容器刷新的时候可以自定义逻辑，不同的Spring容器做不同的事情。
+            onRefresh();
+            // 注册监听器，广播early application events
+            registerListeners();
+            // 实例化所有剩余的（非懒加载）单例
+            // 比如invokeBeanFactoryPostProcessors方法中根据各种注解解析出来的类，在这个时候都会被初始化。
+            // 实例化的过程各种BeanPostProcessor开始起作用。
+            
+              (beanFactory);
+            // refresh做完之后需要做的其他事情。
+            // 清除上下文资源缓存（如扫描中的ASM元数据）
+            // 初始化上下文的生命周期处理器，并刷新（找出Spring容器中实现了Lifecycle接口的bean并执行start()方法）。
+            // 发布ContextRefreshedEvent事件告知对应的ApplicationListener进行响应的操作
+            finishRefresh();
+        } catch (BeansException ex) {
+            if (logger.isWarnEnabled()) {
+                logger.warn("Exception encountered during context initialization - " +
+                        "cancelling refresh attempt: " + ex);
+            }
+            // Destroy already created singletons to avoid dangling resources.
+            destroyBeans();
+            // Reset 'active' flag.
+            cancelRefresh(ex);
+            // Propagate exception to caller.
+            throw ex;
+        } finally {
+            // Reset common introspection caches in Spring's core, since we
+            // might not ever need metadata for singleton beans anymore...
+            resetCommonCaches();
+        }
+    }
+}
+```
+
+
+
+
+
+三:循环依赖
+
+首先考录修改结构消除循环依赖，不行的情况下可以使用@Lazy,setter注入的等方式使bean被懒加载，从而解决问题。
 
 
 
@@ -1330,4 +1425,120 @@ select * from t1 where age=10 and name =‘tao’
 
 > 基础
 
-一: AQS和可重入锁
+一:线程池得参数，拒绝策略
+
+```java
+   public ThreadPoolExecutor(int corePoolSize,
+                              int maximumPoolSize,
+                              long keepAliveTime,
+                              TimeUnit unit,
+                              BlockingQueue<Runnable> workQueue) {
+        this(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue,
+             Executors.defaultThreadFactory(), defaultHandler);
+    }
+```
+
+**corePoolSize** – 池中要保留的线程数，即使它们处于空闲状态，除非设置了 `allowCoreThreadTimeOut`
+
+**maximumPoolSize**– 池中允许的最大线程数
+
+**keepAliveTime** – 当线程数大于核心时，这是多余空闲线程在终止前等待新任务的最长时间。
+
+**unit** – `keepAliveTime` 参数的时间单位
+
+**workQueue** – 用于在执行任务之前保存任务的队列。这个队列将只保存 execute 方法提交的 Runnable 任务。
+
+```java
+ThreadFactory threadFactory
+RejectedExecutionHandler handler
+```
+
+**一个是线程工厂，用来创建线程**，主要是用来给线程起名字
+
+**还有一个是拒绝策略**，当线程池被耗尽或者队列满了的时候会调用,默认的实现是**AbortPolicy**,如果线程池队列满了丢掉这个任务并且抛出`RejectedExecutionException`异常。
+
+
+
+二:lock的底层实现
+
+lock接口的实现类有读写锁 ，可重入锁（ReentrantLock）等
+
+lock接口的实现类核心同步器`sync` ,它是一个抽象静态内部类，继承`AbstractQueuedSynchronizer`抽象类即aqs
+
+
+
+三: AQS(*抽象队列同步器*)和可重入锁
+
+aqs 主要实现了共享锁和排他锁
+
+aqs 维护了一个由volatile修饰的int字段 state，表示加锁的次数。
+
+排他锁：
+
+当一个线程过来时加锁时然后尝试获取锁，state初始时0，获取锁时则++。这个尝试方法由对应的lock实现类 的核心同步器`sync`实现。或如锁的方式如下。
+
+```java
+             * 1. If read count nonzero or write count nonzero
+             *    and owner is a different thread, fail.
+             * 2. If count would saturate, fail. (This can only
+             *    happen if count is already nonzero.)
+             * 3. Otherwise, this thread is eligible for lock if
+             *    it is either a reentrant acquire or
+             *    queue policy allows it. If so, update state
+             *    and set owner.
+```
+
+翻译下：
+
+1.如果state不为0或者线程所有者不是当前线程则失败
+
+2.当计数器达到上限时则失败
+
+3.如果是可重入或者队列允许的情况下该线程可以获取锁并更新状态设置所有者
+
+没有获取到锁的线程将会被加到等待队列中。
+
+
+
+共享锁：
+
+state初始时是构造实现类时传入的值。获取锁时则--。
+
+尝试获取资源复数表示失败，0表示成功，但是可能没有可用资源，正数表示成功且有可用资源
+
+如果发现自己是第二个节点，会再次去尝试获得锁资源,没有获取到锁的线程则加入到等待队列中
+
+
+
+可重入锁（ReentrantLock）为排他锁
+
+当一个线程过来时加锁时会判断是否当前锁是否是当前线程，是的化还能获取锁state+1
+
+这里还有公平锁还是非公平锁（lock实现类构造方法决定）的区分，非公平锁将不会判断等待队列里是否有值。
+
+
+
+AQS中还提供了一个内部类ConditionObject，它实现了Condition接口，可以用于await/signal。采用CLH队列的算法，唤醒当前线程的下一个节点对应的线程，而signalAll唤醒所有线程。
+
+
+
+三:JVM垃圾回收算法
+
+
+
+> redis
+
+一: `redis`基础数据类型 string（字符串），hash（哈希），list（列表），set（集合）及sortset（有序集合）
+
+
+
+二: `redis`的事物如何处理
+
+- MULTI：用来组装一个事务；
+- EXEC：用来执行一个事务；
+- DISCARD：用来取消一个事务；
+- WATCH：用来监视一些key，一旦这些key在事务执行之前被改变，则取消事务的执行
+
+这些入队的命令会根据顺序在事务执行后，一个一个执行
+
+`redis` 在事务失败时不进行回滚，而是继续执行余下的命令
