@@ -181,12 +181,26 @@ under the License.
       <blocked>true</blocked>
     </mirror>
 	
-	<mirror>
-      <id>alimaven</id>
-      <name>aliyun maven</name>
-      <url>http://maven.aliyun.com/nexus/content/groups/public/</url>
-      <mirrorOf>central</mirrorOf>       
-    </mirror>
+    	<mirror> 
+   <id>alimaven</id> 
+   <name>aliyun maven</name> 
+   <url>http://maven.aliyun.com/nexus/content/repositories/central/</url> 
+   <mirrorOf>central</mirrorOf> 
+  </mirror> 
+  
+  <mirror> 
+   <id>junit</id> 
+   <name>junit Address/</name> 
+   <url>http://jcenter.bintray.com/</url> 
+   <mirrorOf>central</mirrorOf> 
+  </mirror>
+  
+  <mirror> 
+   <id>alimaven</id> 
+   <name>aliyun maven</name> 
+   <url>http://central.maven.org/maven2</url> 
+   <mirrorOf>central</mirrorOf> 
+  </mirror> 
   </mirrors>
 
   <!-- profiles
