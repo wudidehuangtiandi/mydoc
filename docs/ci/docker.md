@@ -86,6 +86,13 @@ systemctl enable docker
 
 
 
+```shell # 重启所有容器
+docker restart $(docker ps -a -q)
+
+# 重启所有运行中的容器
+docker restart $(docker ps -q)
+```
+
 > 要使用docker，一些概念和命令是需要掌握的
 
 1.镜像和容器
