@@ -195,6 +195,9 @@ docker inspect container1
 
 #容器内文件拷贝到宿主机路径
 docker cp f26e21ddd20d:/hauscal.sql /www/code/
+
+#查看网桥
+docker network ls
 ```
 
 ## 三.一些常见的服务部署
@@ -2623,6 +2626,24 @@ rabbitmq:management
 
 打开控制台
 docker exec -it rabbitmq rabbitmq-plugins enable rabbitmq_management
+```
+
+8.下面展示一下关于使用网桥模式的启动方式（默认就会是bridge模式会加入bridge网桥）
+
+此时我们可以用`--net`指定网桥，使用` --ip`指定IP（否则重启容器将自动重新分配IP）,使用`--expose ` 暴露端口此时我们不需要配 `-p xxxx:xxxx`同一网桥内可以互相通信，且 不占用主机端口，宿主机访问时仅需`172.18.0.9:8881`即可。相当于重新分配了内网，这个模式更好一些。
+
+```shell
+docker run \
+       -d \
+       --name cgsm \
+       -v /data/workspace/cgsm:/data/workspace/cgsm \
+       -w /data/workspace/cgsm \
+       -e SERVICE_NAME=cgsm \
+       -e TZ="Asia/Shanghai" \
+       --net local_app_net  \
+       --ip 172.18.0.9 \
+       --expose 8881 \
+       openjdk:8 java -Xms256m -Xmx512m -XX:CompressedClassSpaceSize=128m -XX:MetaspaceSize=200m -XX:MaxMetaspaceSize=200m -Dfile.encoding=utf-8 -jar /data/workspace/cgsm/cgsm.jar
 ```
 
 

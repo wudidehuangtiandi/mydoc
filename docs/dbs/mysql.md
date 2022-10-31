@@ -446,3 +446,617 @@ update xxx set version=version+1 where id = xx and version = 上面查出来的v
 2.由于 MySQL 的行锁是针对索引加的锁,不是针对记录加的锁,所以虽然是访问不同行的记录,但是如果是使用相同的索引键,是会出现锁冲突的。
 3.当表有多个索引的时候,不同的事务可以使用不同的索引锁定不同的行,另外,不论 是使用主键索引、唯一索引或普通索引,InnoDB都会使用行锁来对数据加锁。
 4.即便在条件中使用了索引字段,但是否使用索引来检索数据是由 MySQL 通过判断不同 执行计划的代价来决定的,如果 MySQL 认为全表扫效率更高,比如对一些很小的表,它 就不会使用索引,这种情况下 InnoDB 将使用表锁,而不是行锁。因此,在分析锁冲突时, 别忘了检查SQL 的执行计划（explain查看）,以确认是否真正使用了索引。
+
+
+
+## 四.存储过程
+
+> 此处记录生产过程中常见的导入数据的几个存储过程
+
+1.将`excel`导入`mysql`,场景1 我们需要将用户的表导入到我们的系统中，但是有个字段用户存的是中文，我们必须去我们的另一张表动态获取
+
+```sql
+CREATE DEFINER=`root`@`%` PROCEDURE `import_house`()
+BEGIN
+-- 	一二三四级网格名，房屋信息为推测，不准确
+	DECLARE
+		f_gdn VARCHAR ( 32 );
+	DECLARE
+		w_gdn VARCHAR ( 32 );
+	DECLARE
+		t_gdn VARCHAR ( 32 );
+	DECLARE
+		fo_gdn VARCHAR ( 32 );
+	DECLARE
+		house_number VARCHAR ( 32 );
+	DECLARE
+		homeowner_name VARCHAR ( 32 );
+	DECLARE
+		homeowner_idcard VARCHAR ( 32 );
+	DECLARE
+		homeowner_phone VARCHAR ( 32 );
+	DECLARE
+		g_id BIGINT;-- 没有boolean
+	DECLARE
+		done INT DEFAULT FALSE;
+	DECLARE
+		cur CURSOR FOR SELECT DISTINCT
+		一级网格名称,二级网格名称,三级网格名称,四级网格名称,门牌号,户主姓名,身份证号码,手机号码 
+	FROM
+		`人口信息表` 
+	WHERE
+		与户主关系 = '户主';
+	DECLARE
+		CONTINUE HANDLER FOR NOT FOUND 
+		SET done = TRUE;
+	OPEN cur;
+	read_loop :
+	LOOP
+			FETCH cur INTO f_gdn,
+			w_gdn,
+			t_gdn,
+			fo_gdn,
+			house_number,
+			homeowner_name,
+			homeowner_idcard,
+			homeowner_phone;
+		IF
+			done THEN
+				LEAVE read_loop;
+			
+		END IF;
+		SELECT
+			@g_id := grid_id 
+		FROM
+			sys_grid 
+		WHERE
+			grid_name = fo_gdn 
+			AND parent_id = ( SELECT grid_id FROM sys_grid WHERE grid_name = t_gdn );
+		
+--   打印
+-- 	 SELECT
+-- 		 concat( 'grid_id is ', g_id );
+			
+		INSERT INTO csgm_house ( grid_id, house_number, homeowner_name, homeowner_idcard, homeowner_phone, house_status, create_time, update_time, del_flag )
+		VALUES
+			( @g_id, house_number, homeowner_name, homeowner_idcard, homeowner_phone, '1', now(), now(), '0' );
+		COMMIT;
+		
+	END LOOP;
+	CLOSE cur;
+
+END
+```
+
+2.将`excel`导入`mysql`,场景2 我们要从刚才导入的表中查询一个字段，且这次游标中有大量字段，且有很多字段需要动态匹配，包括字符串和日期
+
+```sql
+CREATE DEFINER=`root`@`%` PROCEDURE `import_popution`()
+BEGIN-- 	一二三四级网格名
+	DECLARE
+		f_gdn VARCHAR ( 32 );
+	DECLARE
+		w_gdn VARCHAR ( 32 );
+	DECLARE
+		t_gdn VARCHAR ( 32 );
+	DECLARE
+		fo_gdn VARCHAR ( 32 );
+	DECLARE
+		mph VARCHAR ( 32 );
+	DECLARE
+		hzxm VARCHAR ( 32 );
+	DECLARE
+		xjd VARCHAR ( 300 );
+	DECLARE
+		xm VARCHAR ( 32 );
+	DECLARE
+		sfzh VARCHAR ( 32 );
+	DECLARE
+		xb VARCHAR ( 32 );
+	DECLARE
+		yhzgx VARCHAR ( 32 );
+	DECLARE
+		mz VARCHAR ( 32 );
+	DECLARE
+		jg VARCHAR ( 32 );
+	DECLARE
+		hyzk VARCHAR ( 32 );
+	DECLARE
+		csrq VARCHAR ( 32 );
+	DECLARE
+		gzdw VARCHAR ( 32 );
+	DECLARE
+		whcd VARCHAR ( 32 );
+	DECLARE
+		zzmm VARCHAR ( 32 );
+	DECLARE
+		sjhm VARCHAR ( 32 );
+	DECLARE
+		rklx VARCHAR ( 32 );
+	DECLARE
+		gllb VARCHAR ( 32 );
+	DECLARE
+		byzk VARCHAR ( 32 );
+	DECLARE
+		ylbx VARCHAR ( 32 );
+	DECLARE
+		jkzk VARCHAR ( 32 );
+	DECLARE
+		yfdx VARCHAR ( 32 );
+	DECLARE
+		clxx VARCHAR ( 32 );
+	DECLARE
+		rks VARCHAR ( 32 );
+	DECLARE
+		nl VARCHAR ( 32 );
+	DECLARE
+		zp VARCHAR ( 32 );
+	DECLARE
+		zxsj VARCHAR ( 32 );
+	DECLARE
+		zxxx VARCHAR ( 32 );
+	DECLARE
+		djr VARCHAR ( 32 );
+	DECLARE
+		djrq VARCHAR ( 32 );
+	DECLARE
+		bz VARCHAR ( 32 );
+	DECLARE
+		dwbh VARCHAR ( 32 );
+	DECLARE
+		fzxm VARCHAR ( 32 );
+	DECLARE
+		yzd VARCHAR ( 32 );
+	DECLARE
+		khh VARCHAR ( 32 );
+	DECLARE
+		yhzh VARCHAR ( 32 );
+	DECLARE
+		zdaz VARCHAR ( 32 );
+	DECLARE
+		azwh VARCHAR ( 32 );
+	DECLARE
+		shjz VARCHAR ( 32 );
+	DECLARE
+		zxck VARCHAR ( 32 );
+	DECLARE
+		qck VARCHAR ( 32 );
+	DECLARE
+		fcb VARCHAR ( 32 );
+	DECLARE
+		ymjz VARCHAR ( 32 );
+	DECLARE
+		g_id BIGINT;
+	DECLARE
+		h_id BIGINT;
+	DECLARE
+		done INT DEFAULT FALSE;
+	DECLARE
+		cur CURSOR FOR SELECT DISTINCT
+		* 
+	FROM
+		`人口信息表`;
+	DECLARE
+		CONTINUE HANDLER FOR NOT FOUND 
+		SET done = TRUE;
+	OPEN cur;
+	read_loop :
+	LOOP
+			FETCH cur INTO f_gdn,
+			w_gdn,
+			t_gdn,
+			fo_gdn,
+			mph,
+			hzxm,
+			xjd,
+			xm,
+			sfzh,
+			xb,
+			yhzgx,
+			mz,
+			jg,
+			hyzk,
+			csrq,
+			gzdw,
+			whcd,
+			zzmm,
+			sjhm,
+			rklx,
+			gllb,
+			byzk,
+			ylbx,
+			jkzk,
+			yfdx,
+			clxx,
+			rks,
+			nl,
+			zp,
+			zxsj,
+			zxxx,
+			djr,
+			djrq,
+			bz,
+			dwbh,
+			fzxm,
+			yzd,
+			khh,
+			yhzh,
+			zdaz,
+			azwh,
+			shjz,
+			zxck,
+			qck,
+			fcb,
+			ymjz;
+		IF
+			done THEN
+				LEAVE read_loop;
+			
+		END IF;-- 查询网格ID 房屋由于未精确提供暂时关联不上
+		SELECT
+			@g_id := grid_id 
+		FROM
+			sys_grid 
+		WHERE
+			grid_name = fo_gdn 
+			AND parent_id = ( SELECT grid_id FROM sys_grid WHERE grid_name = t_gdn );
+		SELECT
+			@h_id := house_id 
+		FROM
+			csgm_house 
+		WHERE
+			grid_id = @g_id 
+			AND house_number = mph 
+			AND homeowner_name = hzxm;
+
+		INSERT INTO csgm_population (
+			grid_id,
+			house_id,
+			house_number,
+			house_name,
+			current_residence,
+			NAME,
+			idcard,
+			gender,
+			with_householder_relationship,
+			nation,
+			native_place,
+			marital_status,
+			birth_date,
+			work_unit,
+			culture_degree,
+			political_outlook,
+			phone,
+			population_type,
+			account_type,
+			management_category,
+			military_service_status,
+			endowment_insurance,
+			medical_insurance,
+			health_status,
+			religious_figures,
+			family_planning_object,
+			special_care_object,
+			car_information,
+			poor_status,
+			people_total,
+			age,
+			photo,
+			logout_time,
+			logout_options,
+			registrant,
+			registration_date,
+			unit_number,
+			homeowner_name,
+			movein_time,
+			moveout_time,
+			reason,
+			photo_file,
+			place_origin,
+			bank_deposit,
+			bank_number,
+			land_requisition_place,
+			place_document_number,
+			social_assistance,
+			bicycle_parking,
+			car_parking,
+			fu_cun_bao,
+			vaccination,
+			create_by,
+			create_time,
+			update_by,
+			update_time,
+			remark,
+			del_flag,
+			fixed_phone,
+			audit_status,
+			auditor,
+			audit_time 
+		)
+		VALUES
+			(
+				@g_id,
+				@h_id,
+				mph,
+				hzxm,
+				xjd,
+				xm,
+				sfzh,
+			CASE
+					
+					WHEN xb = '男' THEN
+					0 
+					WHEN xb = '女' THEN
+					1 
+				END,
+			CASE
+					
+					WHEN yhzgx = '户主' THEN
+					1 
+					WHEN yhzgx = '父亲' THEN
+					2 
+					WHEN yhzgx = '父' THEN
+					2 
+					WHEN yhzgx = '母亲' THEN
+					3 
+					WHEN yhzgx = '母' THEN
+					3 
+					WHEN yhzgx = '妻子' THEN
+					4 
+					WHEN yhzgx = '妻' THEN
+					4 
+					WHEN yhzgx = '妻 子' THEN
+					4 
+					WHEN yhzgx = '媳妇' THEN
+					4 
+					WHEN yhzgx = '配偶' THEN
+					4 
+					WHEN yhzgx = '丈夫' THEN
+					5 
+					WHEN yhzgx = '儿子' THEN
+					6 
+					WHEN yhzgx = '女儿' THEN
+					7 
+					WHEN yhzgx = '儿媳' THEN
+					8 
+					WHEN yhzgx = '孙子' THEN
+					9 
+					WHEN yhzgx = '孙女' THEN
+					10 
+					WHEN yhzgx = '重孙' THEN
+					11 
+					WHEN yhzgx = '孙媳' THEN
+					12 ELSE 99 
+				END,
+				CASE
+					
+					WHEN mz = '汉' THEN
+					1 
+					WHEN mz = '汉族' THEN
+					1 
+					WHEN mz = '维吾尔族' THEN
+					4 
+				END,
+				jg,
+						CASE
+					
+					WHEN hyzk = '已婚' THEN
+					2 
+				END,
+			CASE
+					
+					WHEN csrq IS NOT NULL THEN
+					str_to_date( csrq, '%Y/%m/%d' ) ELSE NULL 
+				END,
+				gzdw,
+			CASE
+					
+					WHEN whcd = '小学' THEN
+					1 
+					WHEN whcd = '初中' THEN
+					2 
+					WHEN whcd = '中专' THEN
+					3 
+					WHEN whcd = '高中' THEN
+					4 
+					WHEN whcd = '专科' THEN
+					5 
+					WHEN whcd = '大学专科' THEN
+					5 
+					WHEN whcd = '本科' THEN
+					6 
+					WHEN whcd = '大学本科' THEN
+					6 
+					WHEN whcd = '硕士' THEN
+					7 
+					WHEN whcd = '硕士研究生' THEN
+					7 
+					WHEN whcd = '博士' THEN
+					8 
+					WHEN whcd = '博士研究生' THEN
+					8 
+					WHEN whcd = '博士后' THEN
+					9 ELSE 10 
+				END,
+			CASE
+					
+					WHEN zzmm = '党员' THEN
+					3 
+				END,
+				sjhm,
+			CASE
+					
+					WHEN rklx = '常住人口' THEN
+					1 
+					WHEN rklx = '流动人口' THEN
+					2 
+				END,
+				"",
+				gllb,
+			CASE
+					
+					WHEN byzk = '已服兵役' THEN
+					1 
+				END,
+				"",
+			CASE
+					
+					WHEN ylbx = '职工医保' THEN
+					2 
+				END,
+			CASE
+					
+					WHEN jkzk = '健康' THEN
+					1 
+				END,
+				"",
+				"",
+				yfdx,
+			CASE
+					
+					WHEN jkzk = '有车' THEN
+					1 
+				END,
+				"",
+				rks,
+				nl,
+				zp,
+			CASE
+					
+					WHEN zxsj IS NOT NULL THEN
+					str_to_date( zxsj, '%Y/%m/%d' ) ELSE NULL 
+				END,
+				zxxx,
+				djr,
+			CASE
+					
+					WHEN djrq IS NOT NULL THEN
+					str_to_date( djrq, '%Y/%m/%d' ) ELSE NULL 
+				END,
+				dwbh,
+				fzxm,
+				NULL,
+				NULL,
+				"",
+				"",
+				yzd,
+				khh,
+				yhzh,
+			CASE
+					
+					WHEN zdaz = 'False' THEN
+					0 
+					WHEN zdaz = 'True' THEN
+					1 
+				END,
+				azwh,
+			CASE
+					
+					WHEN shjz = 'False' THEN
+					0 
+				END,
+				zxck,
+				qck,
+			CASE
+					
+					WHEN fcb = 'False' THEN
+					0
+					WHEN zdaz = 'True' THEN
+					1
+				END,
+			CASE
+					
+					WHEN fcb = '已接种' THEN
+					2 
+				END,
+				"",
+				now(),
+				"",
+				now(),
+				bz,
+				"0",
+				"",
+				"2",
+				"",
+				NOW() 
+			);
+		COMMIT;
+		
+	END LOOP;
+	CLOSE cur;
+
+END
+```
+
+3.将`excel`导入`mysql`,场景3 我们要根据我们查询到的表数据去动态更新我们的表
+
+```sql
+CREATE DEFINER=`root`@`%` PROCEDURE `import`()
+BEGIN
+	DECLARE
+		l_id VARCHAR ( 32 );
+	DECLARE
+		code VARCHAR ( 64 );
+	DECLARE
+		done INT DEFAULT FALSE;
+	DECLARE
+		cur CURSOR FOR SELECT DISTINCT
+		a.BIS_ID id 
+	FROM
+		base_logistics_drug a
+		LEFT JOIN base_drug_map b ON a.BIS_ID = b.LOGISTICS_DRUG_ID 
+		AND b.END_TIME IS NULL 
+		AND b.DELETED = "0" 
+		AND a.END_TIME IS NULL 
+		AND a.DELETED = "0" 
+	WHERE
+		b.sys_org_code IS NOT NULL;
+	DECLARE
+		CONTINUE HANDLER FOR NOT FOUND 
+		SET done = TRUE;
+	OPEN cur;
+	read_loop :
+	LOOP
+			FETCH cur INTO l_id;
+		IF
+			done THEN
+				LEAVE read_loop;		
+		END IF;
+		
+			SELECT
+				@code:=concode 
+			FROM
+				(
+				SELECT
+					m.id,
+					GROUP_CONCAT( m.CODE ) concode 
+				FROM
+					(
+					SELECT DISTINCT
+						a.BIS_ID id,
+						b.sys_org_code CODE 
+					FROM
+						base_logistics_drug a
+						LEFT JOIN base_drug_map b ON a.BIS_ID = b.LOGISTICS_DRUG_ID 
+						AND b.END_TIME IS NULL 
+						AND b.DELETED = "0" 
+						AND a.END_TIME IS NULL 
+						AND a.DELETED = "0" 
+					WHERE
+						b.sys_org_code IS NOT NULL 
+					) m 
+				GROUP BY
+					m.id 
+				) list 
+			WHERE
+				list.id = l_id;
+						
+			UPDATE base_logistics_drug set map_dept = @code where  BIS_ID=l_id and END_TIME is null and DELETED ='0';
+			
+			commit;
+	
+		END LOOP;
+CLOSE cur;
+END
+```
+
