@@ -18,10 +18,11 @@
 * 中间件
   * [redis](/mw/redis)
 
-* 数据库
+* 数据库相关
   * [函数](/dbs/function)
   * [mysql](/dbs/mysql)
   * [oracle](/dbs/oracle)
+  * [powerdesign](/dbs/powerdesign)
 
 * 服务器
   * [tomcat源码解析](/servers/tomcat)
