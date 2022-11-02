@@ -111,3 +111,21 @@
 
 ![avatar](https://picture.zhanghong110.top/docsify/16672977465930.png)
 
+
+
+## 2.根据pd生成数据库
+
+我们点击`database/Generate Datebase`这时候我们点击应用，注意要确保filename在数据库中存在，选择的话需要选的我们需要的数据源（ODBC中配置的）
+
+![avatar](https://picture.zhanghong110.top/docsify/16673528104322.png)
+
+之后它会在指定目录生成一个SQL文件，还会弹出一个运行文件，我们`run`即可，可以发现数据库中成功生成了
+
+![avatar](https://picture.zhanghong110.top/docsify/16673529375998.png)
+
+> 单表生成直接运行sql去生成
+
+![avatar](https://picture.zhanghong110.top/docsify/16673530931369.png)
+
+
+
