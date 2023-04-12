@@ -287,12 +287,21 @@ mysql 注意配置文件默认为空，下面贴一个
 
 docker run -p 3306:3306 --name mysql \
 -v /home/mysql/data:/var/lib/mysql \
--v /home/mysql/conf:/etc/mysql/conf.d \
+-v /home/mysql/conf:/etc/mysql \
 -v /home/mysql/mysql-files:/var/lib/mysql-files/ \
 -e TZ=Asia/Shanghai \
 -e MYSQL_ROOT_PASSWORD=xxxxxx \
 -d mysql \
 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time_zone='+8:00' --lower_case_table_names=1
+8.0后期版本
+docker run  --name mysql \
+-v /home/mysql/data:/var/lib/mysql \
+-v /home/mysql/conf/my.cnf:/etc/mysql/conf.d/my.cnf \
+-v /home/mysql/mysql-files:/var/lib/mysql-files/ \
+-e TZ=Asia/Shanghai -e MYSQL_ROOT_PASSWORD=xxxx \
+-d mysql  \
+--character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time_zone='+8:00' --lower_case_table_names=1
+
 ```
 
 适配mysql8
