@@ -45,6 +45,7 @@
   * [git的基本使用及配置](/other/git)
   * [知识概念整理](/other/knowledge )
   * [乌班图相关](/other/ubuntu)
+  * [acme.sh](/other/acme)
   * [开发技巧](/other/ds)
   
 * [作者相关](#Introduction)
