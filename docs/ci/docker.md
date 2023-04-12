@@ -287,7 +287,7 @@ mysql 注意配置文件默认为空，下面贴一个
 
 docker run -p 3306:3306 --name mysql \
 -v /home/mysql/data:/var/lib/mysql \
--v /home/mysql/conf:/etc/mysql \
+-v /home/mysql/conf:/etc/mysql/conf.d \
 -v /home/mysql/mysql-files:/var/lib/mysql-files/ \
 -e TZ=Asia/Shanghai \
 -e MYSQL_ROOT_PASSWORD=xxxxxx \
