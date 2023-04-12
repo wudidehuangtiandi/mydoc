@@ -14,6 +14,7 @@
   * [ts](/javascript/ts)
   * [前端布局](/javascript/bj)
   * [nodejs多版本兼容及npm下载位置更改](/javascript/nodeall)
+  * [nodejs学习](/javascript/node)
 
 * 中间件
   * [redis](/mw/redis)
@@ -44,6 +45,7 @@
   * [git的基本使用及配置](/other/git)
   * [知识概念整理](/other/knowledge )
   * [乌班图相关](/other/ubuntu)
+  * [开发技巧](/other/ds)
   
 * [作者相关](#Introduction)
   
