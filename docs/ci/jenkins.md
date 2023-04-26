@@ -4,9 +4,23 @@
 
 [官网安装地址](https://www.jenkins.io/zh/doc/book/installing/)
 
+!>docker 安装的注意事项,使用jenkins/jenkins镜像，不要使用官网推荐那个，会有各种奇怪问题，参考安装命令
+
+```shell
+docker run \
+  --name jenkins \
+  -u root \
+  -d \
+  -p 8080:8080 \
+  -p 50000:50000 \
+  -v /home/jenkins:/var/jenkins_home \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  jenkinsci/blueocean
+```
+
 ## jenkins的非docker的正确安装
 
-```
+```shell
   sudo wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat/jenkins.repo
   sudo rpm --import https://pkg.jenkins.io/redhat/jenkins.io.key
   yum install epel-release # repository that provides 'daemonize'
@@ -52,11 +66,11 @@
 
 
 
-1.在`全局工具配置`中添加一个nodejs![avatar](https://picture.zhanghong110.top/docsify/16393781064243.png)
+1.在`全局工具配置`中添加一个nodejs，切换源可以在Global 那个框种填写 npm --registry=https://registry.npm.taobao.org![avatar](https://picture.zhanghong110.top/docsify/16393781064243.png)
 
 
 
-2.在系统配置中，配置SSH SERVER ，输入名字，地址，账户，密码，端口点击保存
+2.在系统配置中，配置SSH SERVER ，输入名字，地址，账户，密码，端口点击保存,这一步如果需要SSH通道，可以直接在高级-KEY种输入，注意这里只支持前缀为-----BEGIN RSA PRIVATE KEY-----的私钥
 
 ![avatar](https://picture.zhanghong110.top/docsify/16393785227014.png)
 
@@ -116,7 +130,7 @@ echo "success"
 
 这个插件不同的版本配置有所区别，我们以`^2.0.5`为例，在`vue.config.js`里导出的根目录下增加如下配置,作用为删除上一个压缩包并且打一个压缩包。
 
-```
+```shell
   configureWebpack: {
     plugins: [
       　new FileManagerPlugin({
@@ -163,7 +177,7 @@ gitlab中填入以下属性，注意选择的分支需要和Jenkins的一致。�
 
 > 下面我们来介绍jenkins如何自动部署java后端项目
 
-1.配置全局工具
+1.配置全局工具，这边docker安装的jenkins如果使用推荐的插件则无需配置JDK。
 
 >JDK，选一个版本后直接自动安装即可，SSH的话配置和前端一样，在系统配置中设置，这两个就不放图片了
 
@@ -177,17 +191,17 @@ maven,如下如所示在jenkins所在机器上放置maven所需配置文件（�
 
 > 这里的gitlab设置和前端完全一样，jenkins构建环境之前的配置也和前端完全一样
 
-2.构建
+2.构建，在构建环境中的Build Steps中配置
 
-这一步区别在于首先需要设置打包命令，注意这个的话是忽略mvn的，正常时`mvn install package -Dmaven.test.skip=true`,然后下main设置正确配置文件即可。
+这一步区别在于首先需要设置打包命令，注意这个的话是忽略mvn的，正常时`mvn clean install package -Dmaven.test.skip=true`,然后下main设置正确配置文件即可。
 
 ![avatar](https://picture.zhanghong110.top/docsify/1639549728.png)
 
 3.构建后操作，这步的目的就是把包发送到目标服务器并且执行命令启动
 
-其前缀路径意义可以参考前端，完全一摸一样，如果没有的可以点击构建选项下的增加构建步骤，最后一行用来执行docker命令
+其前缀路径意义可以参考前端，完全一摸一样，如果没有的可以点击构建选项下的增加构建步骤，注意这边包路径是项目路径下第二个层级开始的。最后一行用来执行docker命令
 
 ![avatar](https://picture.zhanghong110.top/docsify/16395507121046.png)
 
-> 这样一个后端项目就部署完毕了
+> 最后也是配置webhook，这样一个后端项目就部署完毕了
 
