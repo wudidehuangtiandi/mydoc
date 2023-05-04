@@ -657,7 +657,7 @@ public class MyJsonLayOut extends JsonLayout {
 
 这样定义就完事了。
 
-最后我们需要启动`elastalert`,我们这里使用的是elastalert2，1代没法支持企业微信机器人（如果没有固定IP及域名，采用企业微信应用推送是不可行的，智能用机器人推送），它依赖一个yaml及rules中的规则，两个配置都在上面贴出了，我们在企业微信群里增加个机器人，将其链接配置到我们的yaml文件中。
+最后我们需要启动`elastalert`,我们这里使用的是elastalert2，镜像为`jertel/elastalert2`,1代没法支持企业微信机器人（如果没有固定IP及域名，采用企业微信应用推送是不可行的，智能用机器人推送），它依赖一个yaml及rules中的规则，两个配置都在上面贴出了，我们在企业微信群里增加个机器人，将其链接配置到我们的yaml文件中。
 
 ```yaml
 docker run -d \
