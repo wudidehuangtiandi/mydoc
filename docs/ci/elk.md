@@ -581,10 +581,10 @@ server{
         </dependency>
 ```
 
-完事之后在logbackx.xml中添加如下appender即可
+完事之后在logbackx.xml中添加如下appender即可,这边建议使用LogglyBatchAppender,如果使用LogglyAppender会导致项目响应缓慢
 
 ```xml
-    <appender name="stash" class="ch.qos.logback.ext.loggly.LogglyAppender">
+    <appender name="stash" class="ch.qos.logback.ext.loggly.LogglyBatchAppender">
         <!--请求的地址-->
         <endpointUrl>http://xxx.xxx.xxx:9001</endpointUrl>
         <!--定义输出格式JSON-->
