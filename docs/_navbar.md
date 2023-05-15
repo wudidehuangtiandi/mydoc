@@ -47,6 +47,7 @@
   * [乌班图相关](/other/ubuntu)
   * [acme.sh](/other/acme)
   * [开发技巧](/other/ds)
+  * [区块链学习](/other/blockchain)
   
 * [作者相关](#Introduction)
   
