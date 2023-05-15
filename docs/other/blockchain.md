@@ -8,10 +8,12 @@ pragma solidity ^0.8.8;
 
 //contract 类似其它语言的class
 contract SimpleStorage {
-    // boolean,uint,int,address,bytes
+    // boolean,uint（只能正）,int（可正负）,address（地址）,bytes（最多32）
+    
     // bool hasFavoriteNumber = true;
     // public 关键词会自带getter函数，所以可以被外部看见(retrieve实现可以省略public),这些变量在同一作用域会被自动编号比如favoriteNumber是0
     // uint256 public favoriteNumber;
+    // 256 这种可以自定义默认256
     uint256 favoriteNumber;
     // 调用结构体,定义people,内部需要json
     // People public person = People({favoriteNumber:2,name:"gc"});
