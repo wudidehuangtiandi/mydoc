@@ -572,7 +572,6 @@ server{
             <artifactId>logback-jackson</artifactId>
             <version>0.1.5</version>
         </dependency>
-
         <!--log to json-->
         <dependency>
             <groupId>ch.qos.logback.contrib</groupId>
