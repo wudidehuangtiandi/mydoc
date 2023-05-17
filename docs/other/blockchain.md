@@ -126,9 +126,9 @@ contract ExtraStorage is SimpleStorage {
 
 ```
 
-## 3.预言机
+## 3.预言机的初步使用
 
-> 合约在与外界交互时通过可信的分布式预言机来实现我们这采用chainlink，包括价格获取，API调用等等服务
+> 合约在与外界交互时通过可信的区中心化的预言机来实现。我们这采用chainlink，包括价格获取，API调用等等服务
 >
 > 下面的demo演示如何使用chainlink来判断发送的eth是否价值50美元，需要实时获取价格和计算传入eth的价值
 
@@ -145,6 +145,10 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 contract FundMe {
     uint256 public minimumUsd = 50;
 
+    address[] public funders;
+
+    mapping (address => uint256) public addressToAmountFunded;
+
     // 关键词payable，使得函数变红(意思是这个函数可以发送一些代币)
     function fund() public payable {
         //关键词msg.value 获取发送的value,默认单位wei，十的十八位
@@ -152,6 +156,11 @@ contract FundMe {
         //require (msg.value > 1e18, "Did not send enough");
 
         require(msg.value > minimumUsd, "Did not send enough");
+
+        //msg.sender 为关键词，记录调用人地址
+        funders.push(msg.sender);
+        //记录某某人发了多少
+        addressToAmountFunded[msg.sender]=msg.value;
     }
 
     //获取eth对美元的价格
@@ -181,5 +190,6 @@ contract FundMe {
         return ethAmountInUsd;
     }
 }
+
 ```
 
