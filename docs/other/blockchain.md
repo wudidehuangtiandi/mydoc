@@ -155,7 +155,7 @@ contract FundMe {
         //关键词require，满足则通过不满足则返回第二个参数
         //require (msg.value > 1e18, "Did not send enough");
 
-        require(msg.value > minimumUsd, "Did not send enough");
+        require(getConversionRate(msg.value) > minimumUsd, "Did not send enough");
 
         //msg.sender 为关键词，记录调用人地址
         funders.push(msg.sender);
@@ -193,3 +193,80 @@ contract FundMe {
 
 ```
 
+## 4.库
+
+> 可以用来增强某些类型功能
+
+### 4.1基本方式
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+//库里的方法必须时internal修饰
+library PriceConverter {
+      //获取eth对美元的价格
+    function getPrice() internal view returns (uint256) {
+        //ABI可以从文档或者github看到
+        //预言机中获取eth对美元的ADDRESS 0x694AA1769357215DE4FAC081bf1f309aDC325306
+
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(
+            0x694AA1769357215DE4FAC081bf1f309aDC325306
+        );
+        //这个依然是看文档获得的返回值，或者合约源码也有
+        (, int256 price, , , ) = priceFeed.latestRoundData();
+        // answer有八位在小数之后，solidity无法表示小数，也可以调用合约AggregatorV3Interface方法decimals来得到
+        // 这就涉及到了单位转换，我们要把返回值乘以十的十次方，才能得到和我们value相同的位数,然后需要将int转换为uint类型。
+        return uint256(price * 1e10);
+    }
+
+    //计算传入的eth值多少美元
+    function getConversionRate(uint256 ethAmount)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 ethPrice = getPrice();
+        uint256 ethAmountInUsd = (ethPrice * ethAmount) / 1e18;
+
+        return ethAmountInUsd;
+    }
+}
+```
+
+> 调用，先引入，再for一下，最后才能使用。
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+//引入
+import "./PriceConverter.sol";
+
+contract FundMe {
+    //给uint256类型增加Library
+    using PriceConverter for uint256;
+
+    uint256 public minimumUsd = 50;
+
+    address[] public funders;
+
+    mapping(address => uint256) public addressToAmountFunded;
+
+    function fund() public payable {
+        //msg.value会被当作第一个参数传入，如果有第二个参数需要放在括号里
+        require(
+            msg.value.getConversionRate() > minimumUsd,
+            "Did not send enough"
+        );
+
+        funders.push(msg.sender);
+
+        addressToAmountFunded[msg.sender] = msg.value;
+    }
+}
+```
+
+### 4.2
