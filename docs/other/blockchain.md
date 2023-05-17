@@ -5,6 +5,7 @@
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.8;
+// SPDX这个一定要有
 
 //contract 类似其它语言的class
 contract SimpleStorage {
@@ -61,3 +62,68 @@ contract SimpleStorage {
 }
 ```
 
+## 2.和其它合约交互
+
+```solidity
+// SPDX-License-Identifier: MIT 
+
+pragma solidity ^0.8.7;
+
+import "./SimpleStorage.sol"; 
+
+//本节展示如何和其他合约交互，假设SimpleStorage是另一个合约
+contract StorageFactory {
+    
+    SimpleStorage[] public simpleStorageArray;
+    
+    //创建这个合约并且丢到数组里去
+    function createSimpleStorageContract() public {
+        SimpleStorage simpleStorage = new SimpleStorage();
+        simpleStorageArray.push(simpleStorage);
+    }
+    
+    //给指定index的合约赋予一个喜欢的数字
+    function sfStore(uint256 _simpleStorageIndex, uint256 _simpleStorageNumber) public {
+        // Address 
+        // ABI 
+        // SimpleStorage(address(simpleStorageArray[_simpleStorageIndex])).store(_simpleStorageNumber);
+        simpleStorageArray[_simpleStorageIndex].store(_simpleStorageNumber);
+    }
+    
+    //查看指定index的合约喜欢的数字
+    function sfGet(uint256 _simpleStorageIndex) public view returns (uint256) {
+        // return SimpleStorage(address(simpleStorageArray[_simpleStorageIndex])).retrieve();
+        return simpleStorageArray[_simpleStorageIndex].retrieve();
+    }
+}
+```
+
+### 2.1继承和重写
+
+```solidity
+
+    function store(uint256 _favoriteNumber) public virtual {
+        favoriteNumber = _favoriteNumber;
+    }
+```
+
+
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.7;
+
+//继承,分两步先import再 is下
+
+import "./SimpleStorage.sol";
+
+//重写方法，被重写的方法必须加上virtual 关键词允许重写，重写的方法要加上override关键词
+contract ExtraStorage is SimpleStorage {
+    function store(uint256 _favoriteNumber) public override  {
+        favoriteNumber = _favoriteNumber + 5;
+    }
+}
+
+```
+
+## 3.
