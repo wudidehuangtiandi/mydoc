@@ -102,9 +102,9 @@ contract StorageFactory {
 
 ```solidity
 
-    function store(uint256 _favoriteNumber) public virtual {
-        favoriteNumber = _favoriteNumber;
-    }
+function store(uint256 _favoriteNumber) public virtual {
+    favoriteNumber = _favoriteNumber;
+}
 ```
 
 
@@ -126,4 +126,60 @@ contract ExtraStorage is SimpleStorage {
 
 ```
 
-## 3.
+## 3.预言机
+
+> 合约在与外界交互时通过可信的分布式预言机来实现我们这采用chainlink，包括价格获取，API调用等等服务
+>
+> 下面的demo演示如何使用chainlink来判断发送的eth是否价值50美元，需要实时获取价格和计算传入eth的价值
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+//预言机地址https://docs.chain.link/data-feeds/using-data-feeds
+
+//从github仓库拉取接口下面这个地址是从预言机的文档中抄的,
+//仓库合约地址：https://github.com/smartcontractkit/chainlink/blob/develop/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+contract FundMe {
+    uint256 public minimumUsd = 50;
+
+    // 关键词payable，使得函数变红(意思是这个函数可以发送一些代币)
+    function fund() public payable {
+        //关键词msg.value 获取发送的value,默认单位wei，十的十八位
+        //关键词require，满足则通过不满足则返回第二个参数
+        //require (msg.value > 1e18, "Did not send enough");
+
+        require(msg.value > minimumUsd, "Did not send enough");
+    }
+
+    //获取eth对美元的价格
+    function getPrice() public view returns (uint256) {
+        //ABI可以从文档或者github看到
+        //预言机中获取eth对美元的ADDRESS 0x694AA1769357215DE4FAC081bf1f309aDC325306
+
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(
+            0x694AA1769357215DE4FAC081bf1f309aDC325306
+        );
+        //这个依然是看文档获得的返回值，或者合约源码也有
+        (, int256 price, , , ) = priceFeed.latestRoundData();
+        // answer有八位在小数之后，solidity无法表示小数，也可以调用合约AggregatorV3Interface方法decimals来得到
+        // 这就涉及到了单位转换，我们要把返回值乘以十的十次方，才能得到和我们value相同的位数,然后需要将int转换为uint类型。
+        return uint256(price * 1e10);
+    }
+
+    //计算传入的eth值多少美元
+    function getConversionRate(uint256 ethAmount)
+        public
+        view
+        returns (uint256)
+    {
+        uint256 ethPrice = getPrice();
+        uint256 ethAmountInUsd = (ethPrice * ethAmount) / 1e18;
+
+        return ethAmountInUsd;
+    }
+}
+```
+
