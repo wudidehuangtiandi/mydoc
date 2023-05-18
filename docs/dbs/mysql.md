@@ -174,7 +174,7 @@ show status like "%WSREP%"
 
 ![avatar](https://picture.zhanghong110.top/docsify/16621670659303.png)
 
-`n`:
+`s`:
 
 ![avatar](https://picture.zhanghong110.top/docsify/16621640883680.png)
 

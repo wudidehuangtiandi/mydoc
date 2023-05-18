@@ -130,7 +130,7 @@ contract ExtraStorage is SimpleStorage {
 
 > 合约在与外界交互时通过可信的区中心化的预言机来实现。我们这采用chainlink，包括价格获取，API调用等等服务
 >
-> 下面的demo演示如何使用chainlink来判断发送的eth是否价值50美元，需要实时获取价格和计算传入eth的价值
+> 下面的demo演示如何使用chainlink来判断发送的eth是否价值50美元，需要实时获取价格和计算传入eth的价值。顺便将发送的代币和其地址存到合约的address mapping中
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -269,4 +269,157 @@ contract FundMe {
 }
 ```
 
-### 4.2
+## 5.uncheked关键词
+
+> 8.0以后可以用来加在计算之后，使得超过上限时头从开始。
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+contract SafeMathTester {
+    uint8 public bigNumber = 255;
+
+    function add() public {
+    //8.0之后的版本不加就会保持再255上限
+        unchecked {
+            bigNumber = bigNumber + 1;
+        }
+    }
+}
+```
+
+## 6.取款
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+//引入
+import "./PriceConverter.sol";
+
+contract FundMe {
+    //给uint256类型增加Library
+    using PriceConverter for uint256;
+
+    uint256 public minimumUsd = 50;
+
+    address[] public funders;
+
+    mapping(address => uint256) public addressToAmountFunded;
+
+    function fund() public payable {
+        //msg.value会被当作第一个参数传入，如果有第二个参数需要放在括号里
+        require(
+            msg.value.getConversionRate() > minimumUsd,
+            "Did not send enough"
+        );
+
+        funders.push(msg.sender);
+
+        addressToAmountFunded[msg.sender] = msg.value;
+    }
+
+    //取钱，目的将合约中的钱发给调用者
+    function withdraw() public {
+        //数组循环
+        // for(uint256 funderIndex =0; funderIndex< funders.length; funderIndex =funderIndex +1){
+        //     address funder = funders[funderIndex];
+        //     addressToAmountFunded[funder] = 0;
+        // }
+        //重置
+        //funders = new address[](0);
+           
+        //下面是三种提款方式，payable(msg.sender) 把msg.sender从address类型转换成payable address类型，address(this).balance表示调用者合约本身的存款余额
+        //transfer(最多2300gas,失败会直接报错)
+        //payable(msg.sender).transfer(address(this).balance);
+
+        //send(最多2300gas失败返回一个布尔)
+        //bool sendSucess = payable(msg.sender).send(address(this).balance);
+        //加上require,失败会回滚交易
+        //require(sendSuccess,"Send failed");
+
+        //call(没有gas上限，返回bool，推荐)
+        (bool callSuccess,)=payable(msg.sender).call{value: address(this).balance}("");
+        require(callSuccess,"Call failed");
+    }
+}
+```
+
+## 7.构造函数和修饰器
+
+> 现在我们只想这个取钱函数被拥有者调用
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+//引入
+import "./PriceConverter.sol";
+
+contract FundMe {
+    //给uint256类型增加Library
+    using PriceConverter for uint256;
+
+    uint256 public minimumUsd = 50;
+
+    address[] public funders;
+
+    mapping(address => uint256) public addressToAmountFunded;
+
+    address public owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function fund() public payable {
+        //msg.value会被当作第一个参数传入，如果有第二个参数需要放在括号里
+        require(
+            msg.value.getConversionRate() > minimumUsd,
+            "Did not send enough"
+        );
+
+        funders.push(msg.sender);
+
+        addressToAmountFunded[msg.sender] = msg.value;
+    }
+
+    //取钱，目的将合约中的钱发给调用者
+    function withdraw() public onlyOwner{
+        // 单个方式
+        // require(msg.sender == owner, "not owner");
+
+        //数组循环
+        // for(uint256 funderIndex =0; funderIndex< funders.length; funderIndex =funderIndex +1){
+        //     address funder = funders[funderIndex];
+        //     addressToAmountFunded[funder] = 0;
+        // }
+        //重置
+        //funders = new address[](0);
+
+        //下面是三种提款方式，payable(msg.sender) 把msg.sender从address类型转换成payable address类型，address(this).balance表示调用者合约本身的存款余额
+        //transfer(最多2300gas,失败会直接报错)
+        //payable(msg.sender).transfer(address(this).balance);
+
+        //send(最多2300gas失败返回一个布尔)
+        //bool sendSucess = payable(msg.sender).send(address(this).balance);
+        //加上require,失败会回滚交易
+        //require(sendSuccess,"Send failed");
+
+        //call(没有gas上限，返回bool，推荐)
+        (bool callSuccess, ) = payable(msg.sender).call{
+            value: address(this).balance
+        }("");
+        require(callSuccess, "Call failed");
+    }
+
+    //修饰器，方法后面加上这个，会先执行这个，下划线表示加上修饰器的方法和修饰器执行的顺序
+    //像这样表示先执行修饰器再执行方法，如果下划线在上面表示先执行方法再执行修饰器。
+    modifier onlyOwner {
+        require(msg.sender == owner, "not owner");
+        _;
+    }
+}
+```
+
