@@ -1,5 +1,7 @@
 # Solidity语言学习
 
+> 我们先使用BS编译器remix https://remix.ethereum.org/ 来作以下演示。
+
 ## 1.基本类型，函数，结构体，array, mapping及修饰词
 
 ```solidity
@@ -423,3 +425,304 @@ contract FundMe {
 }
 ```
 
+## 8.Immutable和Constant
+
+> 常量使用constant，只可操作一次的变量使用immutable 将会明显减少gas消耗
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+//引入
+import "./PriceConverter.sol";
+
+contract FundMe {
+    //给uint256类型增加Library
+    using PriceConverter for uint256;
+
+    //constant 能减少GAS消耗
+    uint256 public constant MINIMUM_USD = 50;
+
+    address[] public funders;
+
+    mapping(address => uint256) public addressToAmountFunded;
+
+    //只可编译一次
+    address public immutable owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function fund() public payable {
+        //msg.value会被当作第一个参数传入，如果有第二个参数需要放在括号里
+        require(
+            msg.value.getConversionRate() > MINIMUM_USD,
+            "Did not send enough"
+        );
+
+        funders.push(msg.sender);
+
+        addressToAmountFunded[msg.sender] = msg.value;
+    }
+
+    //取钱，目的将合约中的钱发给调用者
+    function withdraw() public onlyOwner{
+        // 单个方式
+        // require(msg.sender == owner, "not owner");
+
+        //数组循环
+        // for(uint256 funderIndex =0; funderIndex< funders.length; funderIndex =funderIndex +1){
+        //     address funder = funders[funderIndex];
+        //     addressToAmountFunded[funder] = 0;
+        // }
+        //重置
+        //funders = new address[](0);
+
+        //下面是三种提款方式，payable(msg.sender) 把msg.sender从address类型转换成payable address类型，address(this).balance表示调用者合约本身的存款余额
+        //transfer(最多2300gas,失败会直接报错)
+        //payable(msg.sender).transfer(address(this).balance);
+
+        //send(最多2300gas失败返回一个布尔)
+        //bool sendSucess = payable(msg.sender).send(address(this).balance);
+        //加上require,失败会回滚交易
+        //require(sendSuccess,"Send failed");
+
+        //call(没有gas上限，返回bool，推荐)
+        (bool callSuccess, ) = payable(msg.sender).call{
+            value: address(this).balance
+        }("");
+        require(callSuccess, "Call failed");
+    }
+
+    //修饰器，方法后面加上这个，会先执行这个，下划线表示加上修饰器的方法和修饰器执行的顺序
+    //像这样表示先执行修饰器再执行方法，如果下划线在上面表示先执行方法再执行修饰器。
+    modifier onlyOwner {
+        require(msg.sender == owner, "not owner");
+        _;
+    }
+
+}
+```
+
+## 9.自定义错误
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+//引入
+import "./PriceConverter.sol";
+
+//定义错误
+error NotOwner();
+
+contract FundMe {
+    //给uint256类型增加Library
+    using PriceConverter for uint256;
+
+    //constant 能减少GAS消耗
+    uint256 public constant MINIMUM_USD = 50;
+
+    address[] public funders;
+
+    mapping(address => uint256) public addressToAmountFunded;
+
+    address public immutable owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function fund() public payable {
+        //msg.value会被当作第一个参数传入，如果有第二个参数需要放在括号里
+        require(
+            msg.value.getConversionRate() > MINIMUM_USD,
+            "Did not send enough"
+        );
+
+        funders.push(msg.sender);
+
+        addressToAmountFunded[msg.sender] = msg.value;
+    }
+
+    //取钱，目的将合约中的钱发给调用者
+    function withdraw() public onlyOwner{
+        // 单个方式
+        // require(msg.sender == owner, "not owner");
+
+        //数组循环
+        // for(uint256 funderIndex =0; funderIndex< funders.length; funderIndex =funderIndex +1){
+        //     address funder = funders[funderIndex];
+        //     addressToAmountFunded[funder] = 0;
+        // }
+        //重置
+        //funders = new address[](0);
+
+        //下面是三种提款方式，payable(msg.sender) 把msg.sender从address类型转换成payable address类型，address(this).balance表示调用者合约本身的存款余额
+        //transfer(最多2300gas,失败会直接报错)
+        //payable(msg.sender).transfer(address(this).balance);
+
+        //send(最多2300gas失败返回一个布尔)
+        //bool sendSucess = payable(msg.sender).send(address(this).balance);
+        //加上require,失败会回滚交易
+        //require(sendSuccess,"Send failed");
+
+        //call(没有gas上限，返回bool，推荐)
+        (bool callSuccess, ) = payable(msg.sender).call{
+            value: address(this).balance
+        }("");
+        require(callSuccess, "Call failed");
+    }
+
+    //修饰器，方法后面加上这个，会先执行这个，下划线表示加上修饰器的方法和修饰器执行的顺序
+    //像这样表示先执行修饰器再执行方法，如果下划线在上面表示先执行方法再执行修饰器。
+    modifier onlyOwner {
+        //require(msg.sender == owner, "not owner");
+        //使用if revert能节省大量GAS
+        if(msg.sender != owner){revert NotOwner();}
+        _;
+    }
+}
+```
+
+## 10.特殊方法
+
+> 比如某些人没使用上面定义的fund方法，像合约发送eth，这时候可以使用特殊方法来做处理
+
+当向合约转账却没有调用正确的方法时会触发receive，当调用方法未找到时会调用fallback
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+contract FallbackExample {
+    uint256 public result;
+
+//特殊函数省略function ,关键词payable标红，external是文档要求的关键词
+    receive() external payable {
+        result = 1;
+    }
+    fallback() external payable{
+        result = 2;
+    }
+}
+```
+
+修改我们的合约，以处理哪些没正确调用存款方法的转账。
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+//引入
+import "./PriceConverter.sol";
+
+//定义错误
+error NotOwner();
+
+contract FundMe {
+    //给uint256类型增加Library
+    using PriceConverter for uint256;
+
+    //constant 能减少GAS消耗
+    uint256 public constant MINIMUM_USD = 50;
+
+    address[] public funders;
+
+    mapping(address => uint256) public addressToAmountFunded;
+
+    address public immutable owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function fund() public payable {
+        //msg.value会被当作第一个参数传入，如果有第二个参数需要放在括号里
+        require(
+            msg.value.getConversionRate() > MINIMUM_USD,
+            "Did not send enough"
+        );
+
+        funders.push(msg.sender);
+
+        addressToAmountFunded[msg.sender] = msg.value;
+    }
+
+    //取钱，目的将合约中的钱发给调用者
+    function withdraw() public onlyOwner {
+        // 单个方式
+        // require(msg.sender == owner, "not owner");
+
+        //数组循环
+        // for(uint256 funderIndex =0; funderIndex< funders.length; funderIndex =funderIndex +1){
+        //     address funder = funders[funderIndex];
+        //     addressToAmountFunded[funder] = 0;
+        // }
+        //重置
+        //funders = new address[](0);
+
+        //下面是三种提款方式，payable(msg.sender) 把msg.sender从address类型转换成payable address类型，address(this).balance表示调用者合约本身的存款余额
+        //transfer(最多2300gas,失败会直接报错)
+        //payable(msg.sender).transfer(address(this).balance);
+
+        //send(最多2300gas失败返回一个布尔)
+        //bool sendSucess = payable(msg.sender).send(address(this).balance);
+        //加上require,失败会回滚交易
+        //require(sendSuccess,"Send failed");
+
+        //call(没有gas上限，返回bool，推荐)
+        (bool callSuccess, ) = payable(msg.sender).call{
+            value: address(this).balance
+        }("");
+        require(callSuccess, "Call failed");
+    }
+
+    //修饰器，方法后面加上这个，会先执行这个，下划线表示加上修饰器的方法和修饰器执行的顺序
+    //像这样表示先执行修饰器再执行方法，如果下划线在上面表示先执行方法再执行修饰器。
+    modifier onlyOwner() {
+        //require(msg.sender == owner, "not owner");
+        if (msg.sender != owner) {
+            revert NotOwner();
+        }
+        _;
+    }
+
+    receive() external payable {
+        fund();
+    }
+
+    fallback() external payable {
+        fund();
+    }
+}
+```
+
+!>至此我们结束了remix上的演示，下面将转入vscode环境
+
+## 11.本地环境
+
+需要模拟的区块链节点：https://github.com/trufflesuite/ganache-ui/releases  去这里下载
+
+需要solcjs来编译sol文件，需要ethers来和合约交互
+
+```
+{
+  "name": "ethers-simple-storage-fcc",
+  "version": "1.0.0",
+  "description": "",
+  "dependencies": {
+    "dotenv": "^14.2.0",
+    "ethers": "^6.2.3",
+    "prettier": "^2.5.1",
+    "solc": "0.8.7-fixed"
+  },
+  "scripts": {
+    "compile": "solcjs --bin --abi --include-path node_modules/ --base-path . -o . SimpleStorage.sol"
+  }
+}
+
+```
+
+> 钢铁侠爸爸说过，在学会走路前要先学会跑步。我们基础先学到这。后面直接抄起现成的项目学习。
