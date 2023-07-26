@@ -15,6 +15,7 @@
   * [前端布局](/javascript/bj)
   * [nodejs多版本兼容及npm下载位置更改](/javascript/nodeall)
   * [nodejs学习](/javascript/node)
+  * [electron](/javascript/electron)
 
 * 中间件
   * [redis](/mw/redis)
