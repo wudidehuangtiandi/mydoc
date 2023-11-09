@@ -49,6 +49,7 @@
   * [acme.sh](/other/acme)
   * [开发技巧](/other/ds)
   * [区块链学习](/other/blockchain)
+  * [电脑控制手机的技巧](/other/vysor)
   
 * [作者相关](#Introduction)
   
