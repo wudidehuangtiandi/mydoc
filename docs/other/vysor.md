@@ -32,9 +32,17 @@ Linux版本：https://dl.google.com/android/repository/platform-tools-latest-lin
 
 此时链接数据线的情况下使用命令`adb devices`可以查看此时的链接，应该有一个，完事之后输入命令`adb tcpip 5555`可以打开一个5555的端口，在`adb connect 手机IP:5555` 此时显示connected即可
 
-下一步需要在vysor上点击connect network or shared device
+下一步需要在vysor上点击connect network or shared device(这步有的版本可省略)
 
 输入手机的IP:5555 即可，此时上面应该会出现两个链接，拔掉数据线，仅存一个链接就是你的无线远程链接了。点进去就能愉快的双向操作了。
+
+下面几个常用命令
+
+查看链接`adb devices`
+
+重启服务`adb start-srever`
+
+杀死服务`adb kill-server`
 
 !>注意，此教程仅适用于安卓，苹果请参照vysor右侧IOS教程操作
 
