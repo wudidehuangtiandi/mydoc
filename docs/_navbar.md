@@ -47,9 +47,10 @@
   * [知识概念整理](/other/knowledge )
   * [乌班图相关](/other/ubuntu)
   * [acme.sh](/other/acme)
-  * [开发技巧](/other/ds)
+  * [开发技巧](/other/ds)s
   * [区块链学习](/other/blockchain)
   * [电脑控制手机的技巧](/other/vysor)
+  * [DDNS及如何利用cloudflare实现服务器隐藏和突破80及443封锁](/other/ddns)
   
 * [作者相关](#Introduction)
   
