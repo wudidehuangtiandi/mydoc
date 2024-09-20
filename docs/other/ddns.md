@@ -13,9 +13,9 @@
 > 为了后续结合cloudflare 我们使用cloudflare（https://dash.cloudflare.com/）来作为域名DNS服务商，当然也可以选择阿里云，域名我们这边选择阿里云购买的域名（为了高匿也可以使用别的域名服务商）。
 DDNS服务 我们使用开源的DDNS-GO（https://github.com/jeessy2/ddns-go） 这个比较好，有成熟的DOCKER镜像 方便部署。
 
-4.家里搞个服务器或者软路由 部署DDNS-GO 本文以DOCKER部署为例 也可自行部署服务 国内DOCKER镜像使用https://docker.m.daocloud.io 阿里源没有这个镜像
+4.家里搞个服务器或者软路由 部署DDNS-GO 本文以DOCKER部署为例 也可自行部署服务 国内DOCKER镜像使用https://docker.m.daocloud.io 阿里源没有这个镜像，配置DDNSGO的时候记得输入密码，完事了多配几个二级域名方便以后使用。配置后cloudflare需要去DNS处修改一下规则，选择下是直连还是代理，后续更新会保持这个规则。
 
-5.使用DOCKER部署该服务（方式自己看文档，没有服务器可以部署在软路由或者NAS上只要支持DOCKER即可）获取cloudflare 的 TOKEN（全局的不行，需要设定好权限的才可以），cloudflare导入域名，域名需要修改DNS服务器为cloudflare的服务器才可以，部署好DDNS-GO，大考控制台输入TOKEN及自己需要代理的域名，自生IP（需要代理到的IP 就是你现在的公网IP）选择使用公共接口查询。
+5.使用DOCKER部署该服务（方式自己看文档，没有服务器可以部署在软路由或者NAS上只要支持DOCKER即可）获取cloudflare 的 TOKEN（全局的不行，需要设定好权限的才可以），cloudflare导入域名，域名需要修改DNS服务器为cloudflare的服务器才可以，部署好DDNS-GO，DOCKER控制台输入TOKEN及自己需要代理的域名，自生IP（需要代理到的IP 就是你现在的公网IP）选择使用公共接口查询。
 
 6.cloudflare 点击域名，点击规则，点击Origin Rules 设置服务端口转发将所有传入请求重写到自己的目标端口比如8088
 

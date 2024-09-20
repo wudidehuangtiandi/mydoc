@@ -51,6 +51,7 @@
   * [区块链学习](/other/blockchain)
   * [电脑控制手机的技巧](/other/vysor)
   * [DDNS及如何利用cloudflare实现服务器隐藏和突破80及443封锁](/other/ddns)
+  * [关于利用shadowsock科学上网及如何使得LINUX科学上网](/other/ss)
   
 * [作者相关](#Introduction)
   
