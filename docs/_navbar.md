@@ -29,7 +29,7 @@
 * 服务器
   * [tomcat源码解析](/servers/tomcat)
   * [nginx的配置及优化](/servers/nginx)
- 
+
 * 持续集成
   * [docker](/ci/docker)
   * [elk](/ci/elk)
@@ -47,7 +47,7 @@
   * [知识概念整理](/other/knowledge )
   * [乌班图相关](/other/ubuntu)
   * [acme.sh](/other/acme)
-  * [开发技巧](/other/ds)s
+  * [开发技巧](/other/ds)
   * [区块链学习](/other/blockchain)
   * [电脑控制手机的技巧](/other/vysor)
   * [DDNS及如何利用cloudflare实现服务器隐藏和突破80及443封锁](/other/ddns)
