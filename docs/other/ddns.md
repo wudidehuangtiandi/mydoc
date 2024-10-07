@@ -25,3 +25,9 @@ DDNS服务 我们使用开源的DDNS-GO（https://github.com/jeessy2/ddns-go） 
 
 !> 本文仅供学习使用，切勿违法乱纪，否则一切后果自行承担。
 
+>关于cloudflare国内加速
+
+国内访问cloudflare默认会走美帝的通道，转一圈回来会导致国内访问速度缓慢，我们可以通过自定义CDN节点分配来解决这个问题，但是由于cloudflare免费版不支持自定义CDN节点，我们只能够采用自定义主机名来实现，但是这样会损失一部分隐匿性。所谓自定义主机名，即通过点击域名下的SSL/TLS目录最后一项为自定义主机名，但是需要你填写VISA卡才能够开通。它的意思是将任意一个指定要CLOUDFLARE CDN节点的域名，分配给你已经定义过的域名的 DNS解析，比如你在CLOUDFLARE给A.COM定义到了你的主机IP 1.51.22.11 然后你在别的运营商那里有个域名B.COM 指向了CLOUDFLARE的任意一个 CDN 节点，这时候通过配置自定义主机名，添加回退源A.COM，然后添加自定义主机名B.COM（需要你在别的运营商配置TXT 验证） ，用户访问B.COM即可也访问到1.51.22.11  无需其他规则配置。 然后我们通过别的运营商的DNS分配原理  比如 指定CDN.B.COM 指向CLOUDFLARE亚太节点记录类型为A值为1.0.0.5 ，配置国外的所有访问。 指定CDN.B.COM 指向CLOUDFLARE国内的快速节点 比如CNAME 值为speed.marisalnc.com，配置国内的所有访问。 最后配置B.COM 指向 CDN.B.COM。此时访问B.COM 即可做到分流，可以使用阿里云（需要缴费）或者腾讯云的DNSPOD。
+另外给一个CLOUDFLARE公共优选地址https://www.baota.me/post-411.html。
+
+总结下上面的操作，就是利用CLOUDFLARE能够给其他域名分配给自己配置域名的DNS的功能，使用外部服务商的DNS功能，指向CLOUDFLARE节点。使得访问其他域名时能够访问到CLOUDFLARE代理的域名的实际IP ，再利用其它服务商的DNS分流功能，实现CDN节点选择。通过选择对于国内较快的CLOUDFLARE节点，实现加速功能。但是也存在几个问题，第一我们需要在国内运营商暴露实际的域名失去了完全匿名的能力，（实际上我们需要的时A.COM而不是B.COM）且B.COM必须备案才可以正常使用443 80等端口，失去了一部分便利性。

@@ -63,3 +63,4 @@ curl www.google.com
 
 ```
 > 至此，应当linux也可以科学上网了
+
